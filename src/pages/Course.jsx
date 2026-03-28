@@ -4,6 +4,7 @@ import CourseInfo from '../components/CourseInfo'
 import EnrollCard from '../components/EnrollCard'
 import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
+import { useAuth } from '../context/AuthContext'
 import './Course.css'
 
 const API_BASE_URL = 'http://localhost:5000'
@@ -97,6 +98,7 @@ function Course() {
   const { slug = '' } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const { token } = useAuth()
   const routeCourse = location.state?.course ?? null
 
   const [course, setCourse] = useState(() => normalizeCourse(routeCourse, slug))
@@ -171,9 +173,16 @@ function Course() {
     try {
       setIsEnrolling(true)
 
+      const headers = token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : undefined
+
       const response = await fetch(`${API_BASE_URL}/enroll/${courseId}`, {
         method: 'POST',
         credentials: 'include',
+        headers,
       })
 
       if (response.status === 409) {

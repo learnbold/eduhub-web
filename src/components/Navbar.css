@@ -89,12 +89,40 @@
 }
 
 .navbar__login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 46px;
   padding: 0 18px;
   border: 0;
   border-radius: 999px;
   background: linear-gradient(135deg, #f8fafc, #dbeafe);
   color: #0f172a;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.navbar__auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navbar__auth-text {
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.navbar__logout {
+  height: 46px;
+  padding: 0 18px;
+  border: 1px solid rgba(226, 232, 240, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -121,7 +149,18 @@
   }
 
   .navbar__search,
-  .navbar__login {
+  .navbar__auth,
+  .navbar__login,
+  .navbar__logout {
     width: 100%;
+  }
+
+  .navbar__auth {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .navbar__auth-text {
+    text-align: center;
   }
 }

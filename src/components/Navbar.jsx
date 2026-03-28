@@ -1,13 +1,25 @@
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import './Navbar.css'
 
 function Navbar() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { isAuthenticated, logout, user } = useAuth()
+  const exploreHref = location.pathname === '/' ? '#popular-courses' : '/#popular-courses'
+
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
+
   return (
     <header className="navbar">
       <div className="navbar__inner">
-        <a className="navbar__brand" href="#top" aria-label="EduHub home">
+        <Link className="navbar__brand" to="/" aria-label="EduHub home">
           <span className="navbar__brand-mark">E</span>
           <span>EduHub</span>
-        </a>
+        </Link>
 
         <label className="navbar__search" aria-label="Search courses">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -20,14 +32,27 @@ function Navbar() {
         </label>
 
         <nav className="navbar__links" aria-label="Primary navigation">
-          <a href="#top">Home</a>
-          <a href="#popular-courses">Explore</a>
-          <a href="#popular-courses">My Courses</a>
+          <Link to="/">Home</Link>
+          <a href={exploreHref}>Explore</a>
+          <Link to="/">My Courses</Link>
         </nav>
 
-        <button type="button" className="navbar__login">
-          Login
-        </button>
+        <div className="navbar__auth">
+          {isAuthenticated ? (
+            <>
+              <span className="navbar__auth-text">
+                {user?.name ? `Hi, ${user.name}` : 'Signed in'}
+              </span>
+              <button type="button" className="navbar__logout" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          ) : (
+            <Link to="/login" className="navbar__login">
+              Login
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   )

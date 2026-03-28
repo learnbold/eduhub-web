@@ -4,6 +4,7 @@ import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
 import VideoList from '../components/VideoList'
 import VideoPlayer from '../components/VideoPlayer'
+import { useAuth } from '../context/AuthContext'
 import './Player.css'
 
 const API_BASE_URL = 'http://localhost:5000'
@@ -46,6 +47,7 @@ function PlayerSkeleton() {
 function Player() {
   const navigate = useNavigate()
   const { courseId = '' } = useParams()
+  const { token } = useAuth()
 
   const [videos, setVideos] = useState([])
   const [currentVideo, setCurrentVideo] = useState(null)
@@ -64,6 +66,11 @@ function Player() {
         const response = await fetch(`${API_BASE_URL}/videos/course/${courseId}/playback`, {
           signal: controller.signal,
           credentials: 'include',
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : undefined,
         })
 
         if (response.status === 404) {
@@ -105,7 +112,7 @@ function Player() {
     fetchVideos()
 
     return () => controller.abort()
-  }, [courseId])
+  }, [courseId, token])
 
   useEffect(() => {
     if (!videos.length) {
