@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import './VideoPlayer.css'
 
-function VideoPlayer({ video, isPreviewMode }) {
+function VideoPlayer({ video }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -33,9 +33,7 @@ function VideoPlayer({ video, isPreviewMode }) {
       }
     }
 
-    loadStream().catch((error) => {
-      console.error('Error loading HLS player:', error)
-    })
+    loadStream().catch(() => {})
 
     return () => {
       isDisposed = true
@@ -65,9 +63,7 @@ function VideoPlayer({ video, isPreviewMode }) {
     <section className="video-player">
       <div className="video-player__header">
         <div>
-          <p className="video-player__eyebrow">
-            {isPreviewMode ? 'Preview playback' : `Lesson ${video.order}`}
-          </p>
+          <p className="video-player__eyebrow">{`Lesson ${video.order}`}</p>
           <h2>{video.title}</h2>
         </div>
         <span className="video-player__status">Streaming ready</span>

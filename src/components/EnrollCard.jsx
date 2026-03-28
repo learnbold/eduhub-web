@@ -20,7 +20,7 @@ const metaRows = (category) => [
   ['Support', 'Guided learning path'],
 ]
 
-function EnrollCard({ course, isPreviewCourse, isEnrolling, enrollError, onEnroll }) {
+function EnrollCard({ course, isEnrolling, enrollError, onEnroll }) {
   const buttonLabel = isEnrolling
     ? 'Preparing your access...'
     : course.isFree
@@ -50,9 +50,7 @@ function EnrollCard({ course, isPreviewCourse, isEnrolling, enrollError, onEnrol
       </button>
 
       <p className="enroll-card__supporting">
-        {isPreviewCourse
-          ? 'Preview mode is active, so you can still continue into a sample player experience.'
-          : 'One focused decision now, a much clearer learning path next.'}
+        One focused decision now, a much clearer learning path next.
       </p>
 
       {enrollError ? <p className="enroll-card__error">{enrollError}</p> : null}

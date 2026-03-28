@@ -22,13 +22,14 @@ const experienceBlocks = [
   },
 ]
 
-function CourseInfo({ course, isPreviewCourse }) {
-  const paragraphs = course.description
+function CourseInfo({ course }) {
+  const description = course.description || ''
+  const paragraphs = description
     .split(/\n+/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
 
-  const descriptionParagraphs = paragraphs.length ? paragraphs : [course.description]
+  const descriptionParagraphs = paragraphs.length ? paragraphs : [description]
   const focusPoints = buildFocusPoints(course.category || 'creative')
 
   return (
@@ -53,7 +54,7 @@ function CourseInfo({ course, isPreviewCourse }) {
       <section className="course-info__copy-card">
         <div className="course-info__section-head">
           <p>About this course</p>
-          {isPreviewCourse ? <span>Preview experience</span> : <span>Live course detail</span>}
+          <span>Live course detail</span>
         </div>
 
         <div className="course-info__description">

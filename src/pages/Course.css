@@ -167,6 +167,43 @@
   font-weight: 600;
 }
 
+.course-error-state {
+  width: min(1200px, calc(100% - 48px));
+  margin: 44px auto 72px;
+  padding: 42px 36px;
+  border-radius: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.78));
+  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.32);
+  text-align: center;
+}
+
+.course-error-state h1 {
+  color: #f8fbff;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  letter-spacing: -0.04em;
+}
+
+.course-error-state p {
+  max-width: 56ch;
+  margin: 16px auto 0;
+  color: #9fb2cb;
+  line-height: 1.8;
+}
+
+.course-error-state__button {
+  min-height: 52px;
+  margin-top: 28px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #eff6ff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .course-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -261,7 +298,8 @@
 
 @media (max-width: 1024px) {
   .course-hero,
-  .course-content {
+  .course-content,
+  .course-error-state {
     width: min(100%, calc(100% - 32px));
   }
 
@@ -282,7 +320,8 @@
 
 @media (max-width: 640px) {
   .course-hero,
-  .course-content {
+  .course-content,
+  .course-error-state {
     width: min(100%, calc(100% - 24px));
   }
 
@@ -312,6 +351,11 @@
 
   .course-content {
     padding-bottom: 56px;
+  }
+
+  .course-error-state {
+    padding: 28px 22px;
+    border-radius: 24px;
   }
 
   .course-skeleton-card--media {

@@ -7,60 +7,23 @@ import Navbar from '../components/Navbar'
 import { useAuth } from '../context/AuthContext'
 import './Course.css'
 
-const API_BASE_URL = 'http://localhost:5000'
-
-const fakeCourse = {
-  title: 'Designing Premium Learning Experiences',
-  description:
-    'Build a polished learning product with a clear content structure, thoughtful design decisions, and a learner journey that feels motivating from the first click. This preview course is here so the page still feels complete even when your live API is unavailable.',
-  thumbnail:
-    'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80',
-  category: 'Product Design',
-  price: 999,
-  isFree: false,
-  courseId: 'preview-premium-learning',
-}
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 const courseBadges = ['Self-paced access', 'Practical lessons', 'Premium learning path']
 
-const createTitleFromSlug = (slug) =>
-  slug
-    ?.split('-')
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ')
-
-const createPreviewCourse = (slug, seed = {}) => ({
-  ...fakeCourse,
-  ...seed,
-  slug,
-  title: seed.title || createTitleFromSlug(slug) || fakeCourse.title,
-  description: seed.description || fakeCourse.description,
-  thumbnail: seed.thumbnail || fakeCourse.thumbnail,
-  category: seed.category || fakeCourse.category,
-  price: seed.price ?? fakeCourse.price,
-  isFree: seed.isFree ?? fakeCourse.isFree,
-  courseId:
-    seed.courseId ||
-    seed.id ||
-    seed._id ||
-    `preview-${slug || fakeCourse.courseId}`,
-})
-
-const normalizeCourse = (data, slug) => {
+const normalizeCourse = (data) => {
   if (!data) {
     return null
   }
 
   return {
-    ...createPreviewCourse(slug, data),
-    courseId: data.courseId || data.id || data._id || null,
+    ...data,
+    _id: data._id || data.id || null,
   }
 }
 
 const getShortDescription = (description) => {
   if (!description) {
-    return fakeCourse.description
+    return ''
   }
 
   const [firstSentence] = description.split(/(?<=[.!?])\s+/)
@@ -101,16 +64,15 @@ function Course() {
   const { token } = useAuth()
   const routeCourse = location.state?.course ?? null
 
-  const [course, setCourse] = useState(() => normalizeCourse(routeCourse, slug))
-  const [loading, setLoading] = useState(() => !normalizeCourse(routeCourse, slug))
+  const [course, setCourse] = useState(() => normalizeCourse(routeCourse))
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [isPreviewCourse, setIsPreviewCourse] = useState(false)
   const [isEnrolling, setIsEnrolling] = useState(false)
   const [enrollError, setEnrollError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
-    const seededCourse = normalizeCourse(routeCourse, slug)
+    setCourse(normalizeCourse(routeCourse))
 
     const fetchCourse = async () => {
       try {
@@ -121,19 +83,22 @@ function Course() {
           signal: controller.signal,
         })
 
+        if (response.status === 404) {
+          setCourse(null)
+          setError('Course not found.')
+          return
+        }
+
         if (!response.ok) {
-          throw new Error(`Failed to fetch course: ${response.status}`)
+          throw new Error('Failed to load course details.')
         }
 
         const data = await response.json()
-        setCourse(normalizeCourse(data, slug))
-        setIsPreviewCourse(false)
+        setCourse(normalizeCourse(data))
       } catch (fetchError) {
         if (fetchError.name !== 'AbortError') {
-          console.error('Error fetching course details:', fetchError)
-          setCourse(seededCourse || createPreviewCourse(slug))
-          setIsPreviewCourse(true)
-          setError('Live details are unavailable right now, so you are seeing a preview version.')
+          setCourse(null)
+          setError('Failed to load course details. Please try again.')
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -154,44 +119,34 @@ function Course() {
 
     setEnrollError('')
 
-    if (isPreviewCourse) {
-      navigate(`/player/${course.courseId || `preview-${slug}`}`)
+    if (!course._id) {
+      setEnrollError('Course ID is missing from the course details response.')
       return
     }
 
-    const courseId = course.courseId
-
-    if (!courseId) {
-      const message =
-        'Enrollment is waiting on a course ID from the course details API response.'
-
-      console.error(message)
-      setEnrollError(message)
+    if (!token) {
+      setEnrollError('Login required to enroll in this course.')
       return
     }
 
     try {
       setIsEnrolling(true)
 
-      const headers = token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : undefined
-
-      const response = await fetch(`${API_BASE_URL}/enroll/${courseId}`, {
+      const response = await fetch(`${API_BASE_URL}/enroll/${course._id}`, {
         method: 'POST',
         credentials: 'include',
-        headers,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       if (response.status === 409) {
-        navigate(`/player/${courseId}`)
+        navigate(`/player/${course._id}`)
         return
       }
 
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Enrollment requires authentication on the current backend.')
+        throw new Error('Login required to enroll in this course.')
       }
 
       if (!response.ok) {
@@ -200,9 +155,8 @@ function Course() {
         throw new Error(responseBody?.message || `Failed to enroll: ${response.status}`)
       }
 
-      navigate(`/player/${courseId}`)
+      navigate(`/player/${course._id}`)
     } catch (enrollFailure) {
-      console.error('Error enrolling in course:', enrollFailure)
       setEnrollError(
         enrollFailure.message || 'Something went wrong while starting this course.'
       )
@@ -211,24 +165,37 @@ function Course() {
     }
   }
 
-  const activeCourse = course || createPreviewCourse(slug)
-
   return (
     <div className="course-shell" id="top">
       <Navbar />
 
       {loading && !course ? (
         <CourseSkeleton />
+      ) : !course ? (
+        <main className="course-page">
+          <section className="course-error-state">
+            <h1>{error || 'Course unavailable'}</h1>
+            <p>
+              We could not load this course from the backend right now. Please go back and try
+              again.
+            </p>
+            <button
+              type="button"
+              className="course-error-state__button"
+              onClick={() => navigate('/')}
+            >
+              Back to Courses
+            </button>
+          </section>
+        </main>
       ) : (
         <main className="course-page">
           <section className="course-hero">
             <div className="course-hero__content">
               <div className="course-hero__copy">
-                <span className="course-hero__badge">{activeCourse.category}</span>
-                <h1>{activeCourse.title}</h1>
-                <p className="course-hero__summary">
-                  {getShortDescription(activeCourse.description)}
-                </p>
+                <span className="course-hero__badge">{course.category}</span>
+                <h1>{course.title}</h1>
+                <p className="course-hero__summary">{getShortDescription(course.description)}</p>
 
                 <div className="course-hero__chips" aria-label="Course highlights">
                   {courseBadges.map((badge) => (
@@ -242,7 +209,7 @@ function Course() {
               <div className="course-hero__panel" aria-hidden="true">
                 <div className="course-hero__panel-card">
                   <span>Premium path</span>
-                  <strong>{activeCourse.isFree ? 'Zero-cost access' : 'Structured paid cohort'}</strong>
+                  <strong>{course.isFree ? 'Zero-cost access' : 'Structured paid cohort'}</strong>
                 </div>
                 <div className="course-hero__panel-card course-hero__panel-card--accent">
                   <span>Focused outcome</span>
@@ -257,13 +224,12 @@ function Course() {
 
             <div className="course-layout">
               <div className="course-main">
-                <CourseInfo course={activeCourse} isPreviewCourse={isPreviewCourse} />
+                <CourseInfo course={course} />
               </div>
 
               <aside className="course-sidebar">
                 <EnrollCard
-                  course={activeCourse}
-                  isPreviewCourse={isPreviewCourse}
+                  course={course}
                   isEnrolling={isEnrolling}
                   enrollError={enrollError}
                   onEnroll={handleEnroll}

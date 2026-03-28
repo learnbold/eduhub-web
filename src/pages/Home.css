@@ -182,6 +182,35 @@
   font-weight: 700;
 }
 
+.courses-alert,
+.courses-empty {
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.88);
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.2);
+}
+
+.courses-alert {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  color: #fca5a5;
+}
+
+.courses-empty {
+  padding: 36px 28px;
+  text-align: center;
+}
+
+.courses-empty h3 {
+  color: #f8fafc;
+  font-size: 1.6rem;
+}
+
+.courses-empty p {
+  margin-top: 12px;
+  color: #94a3b8;
+}
+
 .courses-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

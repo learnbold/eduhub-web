@@ -15,25 +15,9 @@ const parseStoredUser = () => {
 
   try {
     return JSON.parse(storedUser)
-  } catch (error) {
-    console.error('Failed to parse stored auth user:', error)
+  } catch {
     localStorage.removeItem(USER_STORAGE_KEY)
     return null
-  }
-}
-
-const createMockAuthResponse = ({ name, email }) => {
-  const timestamp = Date.now()
-  const learnerName =
-    name?.trim() || email?.split('@')?.[0]?.replace(/[._-]/g, ' ') || 'Demo Learner'
-
-  return {
-    token: `mock-token-${timestamp}`,
-    user: {
-      id: `mock-user-${timestamp}`,
-      name: learnerName.replace(/\b\w/g, (character) => character.toUpperCase()),
-      role: 'student',
-    },
   }
 }
 
@@ -49,7 +33,7 @@ const buildErrorMessage = (fallbackMessage, payload) => {
   return fallbackMessage
 }
 
-const requestAuth = async (endpoint, payload, mockFactory) => {
+const requestAuth = async (endpoint, payload) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
@@ -59,23 +43,22 @@ const requestAuth = async (endpoint, payload, mockFactory) => {
       body: JSON.stringify(payload),
     })
 
-    if (response.ok) {
-      return response.json()
-    }
-
     const responseBody = await response.json().catch(() => null)
 
-    if (response.status === 404 || response.status >= 500) {
-      return mockFactory()
+    if (!response.ok) {
+      throw new Error(
+        buildErrorMessage(`Request failed with status ${response.status}`, responseBody)
+      )
     }
 
-    throw new Error(buildErrorMessage(`Request failed with status ${response.status}`, responseBody))
+    if (!responseBody?.token || !responseBody?.user) {
+      throw new Error('Invalid authentication response from server.')
+    }
+
+    return responseBody
   } catch (error) {
-    if (
-      error instanceof TypeError ||
-      (error instanceof Error && /fetch|network|failed to fetch/i.test(error.message))
-    ) {
-      return mockFactory()
+    if (error instanceof TypeError) {
+      throw new Error('Unable to reach authentication service.')
     }
 
     throw error
@@ -107,18 +90,14 @@ export function AuthProvider({ children }) {
   }
 
   const login = async ({ email, password }) => {
-    const authPayload = await requestAuth('/auth/login', { email, password }, () =>
-      createMockAuthResponse({ email })
-    )
+    const authPayload = await requestAuth('/auth/login', { email, password })
 
     persistAuth(authPayload)
     return authPayload
   }
 
   const register = async ({ name, email, password }) => {
-    const authPayload = await requestAuth('/auth/register', { name, email, password }, () =>
-      createMockAuthResponse({ name, email })
-    )
+    const authPayload = await requestAuth('/auth/register', { name, email, password })
 
     persistAuth(authPayload)
     return authPayload

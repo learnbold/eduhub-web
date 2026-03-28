@@ -5,77 +5,14 @@ import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
 import './Home.css'
 
-const API_BASE_URL = 'http://localhost:5000'
-
-const fakeCourses = [
-  {
-    title: 'Mastering React for Modern Web Apps',
-    slug: 'mastering-react-for-modern-web-apps',
-    courseId: 'preview-react-modern-apps',
-    category: 'Development',
-    price: 59.99,
-    isFree: false,
-    thumbnail:
-      'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    title: 'UI Design Systems from Scratch',
-    slug: 'ui-design-systems-from-scratch',
-    courseId: 'preview-design-systems',
-    category: 'Design',
-    price: 0,
-    isFree: true,
-    thumbnail:
-      'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    title: 'Digital Marketing Growth Playbook',
-    slug: 'digital-marketing-growth-playbook',
-    courseId: 'preview-marketing-growth',
-    category: 'Marketing',
-    price: 44.99,
-    isFree: false,
-    thumbnail:
-      'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    title: 'Python for Data Analysis Bootcamp',
-    slug: 'python-for-data-analysis-bootcamp',
-    courseId: 'preview-python-data',
-    category: 'Data',
-    price: 69.99,
-    isFree: false,
-    thumbnail:
-      'https://images.unsplash.com/photo-1526379095098-d400fd0bf935?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    title: 'Foundations of Product Management',
-    slug: 'foundations-of-product-management',
-    courseId: 'preview-product-foundations',
-    category: 'Business',
-    price: 0,
-    isFree: true,
-    thumbnail:
-      'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    title: 'Motion Graphics for Storytelling',
-    slug: 'motion-graphics-for-storytelling',
-    courseId: 'preview-motion-storytelling',
-    category: 'Creative',
-    price: 39.99,
-    isFree: false,
-    thumbnail:
-      'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=900&q=80',
-  },
-]
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 const skeletonCards = Array.from({ length: 6 }, (_, index) => index)
 
 function Home() {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -83,20 +20,24 @@ function Home() {
     const fetchCourses = async () => {
       try {
         setLoading(true)
+        setError('')
+
         const response = await fetch(`${API_BASE_URL}/courses`, {
           signal: controller.signal,
         })
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch courses: ${response.status}`)
+          throw new Error('Failed to load courses.')
         }
 
         const data = await response.json()
-        setCourses(Array.isArray(data.courses) ? data.courses : [])
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.log('Error fetching courses:', error)
+        const nextCourses = Array.isArray(data) ? data : Array.isArray(data.courses) ? data.courses : []
+
+        setCourses(nextCourses)
+      } catch (fetchError) {
+        if (fetchError.name !== 'AbortError') {
           setCourses([])
+          setError('Failed to load courses. Please try again.')
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -109,9 +50,6 @@ function Home() {
 
     return () => controller.abort()
   }, [])
-
-  const displayCourses = courses.length ? courses : fakeCourses
-  const showingPreviewCourses = !loading && courses.length === 0
 
   return (
     <div className="home-shell" id="top">
@@ -177,13 +115,11 @@ function Home() {
             </div>
 
             <div className="courses-section__status">
-              {showingPreviewCourses ? (
-                <span className="courses-pill">Previewing sample courses</span>
-              ) : (
-                <span className="courses-pill">{courses.length} live courses</span>
-              )}
+              <span className="courses-pill">{courses.length} live courses</span>
             </div>
           </div>
+
+          {error ? <p className="courses-alert">{error}</p> : null}
 
           {loading ? (
             <div className="courses-grid" aria-label="Loading courses">
@@ -196,9 +132,14 @@ function Home() {
                 </div>
               ))}
             </div>
+          ) : courses.length === 0 ? (
+            <section className="courses-empty">
+              <h3>No courses available</h3>
+              <p>Courses will appear here once they are published by the backend.</p>
+            </section>
           ) : (
             <div className="courses-grid">
-              {displayCourses.map((course) => (
+              {courses.map((course) => (
                 <CourseCard
                   key={course.slug}
                   course={course}

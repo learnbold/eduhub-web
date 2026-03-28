@@ -7,25 +7,29 @@ import VideoPlayer from '../components/VideoPlayer'
 import { useAuth } from '../context/AuthContext'
 import './Player.css'
 
-const API_BASE_URL = 'http://localhost:5000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
-const fakeVideos = [
-  {
-    title: 'Introduction',
-    order: 1,
-    hlsUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+const emptyStates = {
+  auth: {
+    title: 'Login required',
+    message: 'Please sign in again to access this course player.',
+    actionLabel: 'Go to Login',
+    actionPath: '/login',
   },
-  {
-    title: 'Building Your Core Workflow',
-    order: 2,
-    hlsUrl: 'https://test-streams.mux.dev/test_001/stream.m3u8',
+  videos: {
+    title: 'No videos available',
+    message:
+      'There are no playable lessons for this course yet. Once videos are ready, they will appear here automatically.',
+    actionLabel: 'Back to Course Catalog',
+    actionPath: '/',
   },
-  {
-    title: 'Advanced Implementation Walkthrough',
-    order: 3,
-    hlsUrl: 'https://test-streams.mux.dev/dai-discontinuity-deltatre/manifest.m3u8',
+  error: {
+    title: 'Player unavailable',
+    message: 'We could not load the lesson playlist from the backend. Please try again.',
+    actionLabel: 'Back to Course Catalog',
+    actionPath: '/',
   },
-]
+}
 
 function PlayerSkeleton() {
   return (
@@ -53,7 +57,7 @@ function Player() {
   const [currentVideo, setCurrentVideo] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [emptyStateKey, setEmptyStateKey] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -62,45 +66,47 @@ function Player() {
       try {
         setLoading(true)
         setError('')
+        setEmptyStateKey('')
 
         const response = await fetch(`${API_BASE_URL}/videos/course/${courseId}/playback`, {
           signal: controller.signal,
           credentials: 'include',
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : undefined,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         })
+
+        if (response.status === 401 || response.status === 403) {
+          setVideos([])
+          setCurrentVideo(null)
+          setError('Login required')
+          setEmptyStateKey('auth')
+          return
+        }
 
         if (response.status === 404) {
           setVideos([])
           setCurrentVideo(null)
-          setIsPreviewMode(false)
+          setEmptyStateKey('videos')
           return
         }
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch playback videos: ${response.status}`)
+          throw new Error('Failed to load course videos.')
         }
 
         const data = await response.json()
-        const sortedVideos = Array.isArray(data)
-          ? [...data].sort((first, second) => first.order - second.order)
-          : []
+        const videoList = Array.isArray(data) ? data : Array.isArray(data.videos) ? data.videos : []
+        const sortedVideos = [...videoList].sort((first, second) => first.order - second.order)
 
         setVideos(sortedVideos)
         setCurrentVideo(sortedVideos[0] ?? null)
-        setIsPreviewMode(false)
       } catch (fetchError) {
         if (fetchError.name !== 'AbortError') {
-          console.error('Error fetching playback videos:', fetchError)
-          setVideos(fakeVideos)
-          setCurrentVideo(fakeVideos[0])
-          setIsPreviewMode(true)
-          setError(
-            'Live playback is unavailable right now, so a preview lesson playlist is loaded.'
-          )
+          setVideos([])
+          setCurrentVideo(null)
+          setError('Failed to load course videos.')
+          setEmptyStateKey('error')
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -142,6 +148,7 @@ function Player() {
   }, [videos.length])
 
   const hasVideos = videos.length > 0
+  const emptyState = emptyStates[emptyStateKey] || emptyStates.videos
 
   return (
     <div className="player-shell" id="top">
@@ -153,9 +160,7 @@ function Player() {
         <main className="player-page">
           <section className="player-overview">
             <div>
-              <p className="player-overview__eyebrow">
-                {isPreviewMode ? 'Preview streaming experience' : 'Course playback'}
-              </p>
+              <p className="player-overview__eyebrow">Course playback</p>
               <h1>{currentVideo?.title || 'Your learning player is ready'}</h1>
               <p className="player-overview__text">
                 Learn with a focused playback space, rapid lesson switching, and a clean
@@ -179,23 +184,20 @@ function Player() {
 
           {!hasVideos ? (
             <section className="player-empty">
-              <h2>No videos available</h2>
-              <p>
-                There are no playable lessons for this course yet. Once videos are ready,
-                they will appear here automatically.
-              </p>
+              <h2>{emptyState.title}</h2>
+              <p>{emptyState.message}</p>
               <button
                 type="button"
                 className="player-empty__button"
-                onClick={() => navigate('/')}
+                onClick={() => navigate(emptyState.actionPath)}
               >
-                Back to Course Catalog
+                {emptyState.actionLabel}
               </button>
             </section>
           ) : (
             <section className="player-layout">
               <div className="player-layout__video">
-                <VideoPlayer video={currentVideo} isPreviewMode={isPreviewMode} />
+                <VideoPlayer video={currentVideo} />
               </div>
 
               <aside className="player-layout__playlist">
