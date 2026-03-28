@@ -1,0 +1,155 @@
+.enroll-card {
+  padding: 28px;
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82)),
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(20, 184, 166, 0.08));
+  box-shadow: 0 28px 70px rgba(2, 6, 23, 0.3);
+}
+
+.enroll-card__price-block,
+.enroll-card__meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.enroll-card__price-block {
+  align-items: flex-start;
+}
+
+.enroll-card__eyebrow,
+.enroll-card__supporting,
+.enroll-card__meta-row span {
+  color: #97acc8;
+}
+
+.enroll-card__eyebrow {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.enroll-card h2 {
+  margin: 0;
+  color: #f8fbff;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.enroll-card__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.enroll-card__badge.free {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.enroll-card__badge.paid {
+  background: rgba(37, 99, 235, 0.16);
+  color: #bfdbfe;
+}
+
+.enroll-card__button {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 28px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2563eb, #14b8a6);
+  color: #eff6ff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 20px 36px rgba(37, 99, 235, 0.28);
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
+}
+
+.enroll-card__button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 40px rgba(20, 184, 166, 0.26);
+  filter: saturate(1.06);
+}
+
+.enroll-card__button:focus-visible {
+  outline: 3px solid rgba(125, 211, 252, 0.45);
+  outline-offset: 4px;
+}
+
+.enroll-card__button:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+
+.enroll-card__supporting {
+  margin: 16px 0 0;
+  font-size: 0.96rem;
+  line-height: 1.7;
+}
+
+.enroll-card__error {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  color: #fecaca;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.enroll-card__meta {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.enroll-card__meta-row {
+  align-items: center;
+}
+
+.enroll-card__meta-row span {
+  font-size: 0.92rem;
+}
+
+.enroll-card__meta-row strong {
+  color: #f8fbff;
+  font-size: 0.96rem;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .enroll-card {
+    padding: 22px;
+    border-radius: 24px;
+  }
+
+  .enroll-card__price-block,
+  .enroll-card__meta-row {
+    flex-direction: column;
+  }
+
+  .enroll-card__meta-row strong {
+    text-align: left;
+  }
+}

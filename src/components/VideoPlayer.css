@@ -1,0 +1,113 @@
+.video-player {
+  border-radius: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.82));
+  box-shadow: 0 28px 70px rgba(2, 6, 23, 0.28);
+  overflow: hidden;
+}
+
+.video-player__header,
+.video-player__empty {
+  padding: 26px 28px 0;
+}
+
+.video-player__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.video-player__eyebrow,
+.video-player__status {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.video-player__eyebrow {
+  margin: 0 0 10px;
+  color: #7dd3fc;
+}
+
+.video-player h2,
+.video-player__empty h2 {
+  color: #f8fbff;
+  letter-spacing: -0.03em;
+}
+
+.video-player h2 {
+  font-size: clamp(1.5rem, 2.4vw, 2.2rem);
+  line-height: 1.2;
+}
+
+.video-player__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+
+.video-player__surface {
+  padding: 22px;
+  animation: video-player-fade 0.28s ease;
+}
+
+.video-player__element {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: 24px;
+  background: #000;
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.34);
+}
+
+.video-player__empty {
+  padding-bottom: 28px;
+}
+
+.video-player__empty p {
+  margin-top: 12px;
+  color: #9fb2cb;
+  line-height: 1.7;
+}
+
+@keyframes video-player-fade {
+  from {
+    opacity: 0.5;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .video-player {
+    border-radius: 24px;
+  }
+
+  .video-player__header,
+  .video-player__empty {
+    padding: 22px 22px 0;
+  }
+
+  .video-player__header {
+    flex-direction: column;
+  }
+
+  .video-player__surface {
+    padding: 18px;
+  }
+
+  .video-player__element {
+    border-radius: 18px;
+  }
+}

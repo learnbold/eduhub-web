@@ -11,6 +11,7 @@ const fakeCourses = [
   {
     title: 'Mastering React for Modern Web Apps',
     slug: 'mastering-react-for-modern-web-apps',
+    courseId: 'preview-react-modern-apps',
     category: 'Development',
     price: 59.99,
     isFree: false,
@@ -20,6 +21,7 @@ const fakeCourses = [
   {
     title: 'UI Design Systems from Scratch',
     slug: 'ui-design-systems-from-scratch',
+    courseId: 'preview-design-systems',
     category: 'Design',
     price: 0,
     isFree: true,
@@ -29,6 +31,7 @@ const fakeCourses = [
   {
     title: 'Digital Marketing Growth Playbook',
     slug: 'digital-marketing-growth-playbook',
+    courseId: 'preview-marketing-growth',
     category: 'Marketing',
     price: 44.99,
     isFree: false,
@@ -38,6 +41,7 @@ const fakeCourses = [
   {
     title: 'Python for Data Analysis Bootcamp',
     slug: 'python-for-data-analysis-bootcamp',
+    courseId: 'preview-python-data',
     category: 'Data',
     price: 69.99,
     isFree: false,
@@ -47,6 +51,7 @@ const fakeCourses = [
   {
     title: 'Foundations of Product Management',
     slug: 'foundations-of-product-management',
+    courseId: 'preview-product-foundations',
     category: 'Business',
     price: 0,
     isFree: true,
@@ -56,6 +61,7 @@ const fakeCourses = [
   {
     title: 'Motion Graphics for Storytelling',
     slug: 'motion-graphics-for-storytelling',
+    courseId: 'preview-motion-storytelling',
     category: 'Creative',
     price: 39.99,
     isFree: false,
@@ -196,7 +202,7 @@ function Home() {
                 <CourseCard
                   key={course.slug}
                   course={course}
-                  onClick={() => navigate(`/course/${course.slug}`)}
+                  onClick={() => navigate(`/course/${course.slug}`, { state: { course } })}
                 />
               ))}
             </div>
