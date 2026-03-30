@@ -9,6 +9,7 @@ function CoursesList() {
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
 
   useEffect(() => {
     if (!hub?._id) {
@@ -62,6 +63,13 @@ function CoursesList() {
             <Link to={`${basePath}/courses/create`} className="dashboard-button">
               Create Course
             </Link>
+            <button
+              type="button"
+              className="dashboard-button--ghost"
+              onClick={() => setShowArchived((value) => !value)}
+            >
+              {showArchived ? 'Hide Archived' : 'Show Archived'}
+            </button>
           </div>
         </div>
       </section>
@@ -84,7 +92,9 @@ function CoursesList() {
         </section>
       ) : (
         <section className="dashboard-grid dashboard-grid--courses">
-          {courses.map((course) => (
+          {courses
+            .filter((course) => (showArchived ? true : course.status !== 'archived'))
+            .map((course) => (
             <article key={course._id} className="dashboard-course-card">
               <div className="dashboard-course-card__header">
                 <div>
@@ -94,15 +104,19 @@ function CoursesList() {
 
                 <div className="dashboard-pill-row">
                   <span className="dashboard-pill dashboard-pill--neutral">{course.category}</span>
-                  <span
-                    className={
-                      course.isPublished
-                        ? 'dashboard-pill dashboard-pill--success'
-                        : 'dashboard-pill dashboard-pill--warning'
-                    }
-                  >
-                    {course.isPublished ? 'Published' : 'Draft'}
-                  </span>
+                  {course.status === 'archived' ? (
+                    <span className="dashboard-pill dashboard-pill--neutral">Archived</span>
+                  ) : (
+                    <span
+                      className={
+                        course.status === 'published' || course.isPublished
+                          ? 'dashboard-pill dashboard-pill--success'
+                          : 'dashboard-pill dashboard-pill--warning'
+                      }
+                    >
+                      {course.status === 'published' || course.isPublished ? 'Published' : 'Draft'}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -121,6 +135,12 @@ function CoursesList() {
                     {course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Recently'}
                   </strong>
                 </div>
+                {course.publishedAt ? (
+                  <div>
+                    <span>Published</span>
+                    <strong>{new Date(course.publishedAt).toLocaleDateString()}</strong>
+                  </div>
+                ) : null}
               </div>
 
               <div className="dashboard-inline-actions">

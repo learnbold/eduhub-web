@@ -80,6 +80,35 @@ export const normalizeCourse = (course) => {
   }
 }
 
+export const normalizeModule = (moduleDoc) => {
+  if (!moduleDoc) {
+    return null
+  }
+
+  return {
+    ...moduleDoc,
+    _id: moduleDoc._id || moduleDoc.id || '',
+    courseId: moduleDoc.courseId || '',
+    position: Number(moduleDoc.position || 0),
+  }
+}
+
+export const normalizeLesson = (lesson) => {
+  if (!lesson) {
+    return null
+  }
+
+  return {
+    ...lesson,
+    _id: lesson._id || lesson.id || '',
+    moduleId: lesson.moduleId || '',
+    courseId: lesson.courseId || '',
+    duration: lesson.duration === undefined || lesson.duration === null ? null : Number(lesson.duration),
+    position: Number(lesson.position || 0),
+    isPreview: Boolean(lesson.isPreview),
+  }
+}
+
 export const normalizeVideo = (video) => {
   if (!video) {
     return null
@@ -243,6 +272,47 @@ export const fetchHubActivity = (token, hubId, signal) =>
 export const createCourse = (token, payload) =>
   request('/courses', { method: 'POST', token, body: payload }, 'Failed to create course.').then(
     normalizeCourse
+  )
+
+export const updateCourse = (token, courseId, payload) =>
+  request(
+    `/courses/${courseId}`,
+    { method: 'PATCH', token, body: payload },
+    'Failed to update course.'
+  ).then(normalizeCourse)
+
+export const publishCourse = (token, courseId) =>
+  request(
+    `/courses/${courseId}/publish`,
+    { method: 'PATCH', token },
+    'Failed to publish course.'
+  ).then(normalizeCourse)
+
+export const archiveCourse = (token, courseId) =>
+  request(
+    `/courses/${courseId}/archive`,
+    { method: 'PATCH', token },
+    'Failed to archive course.'
+  ).then(normalizeCourse)
+
+export const fetchModulesByCourse = (token, courseId, signal) =>
+  request(`/modules/course/${courseId}`, { token, signal }, 'Failed to load course modules.').then(
+    (data) => (Array.isArray(data) ? data.map(normalizeModule).filter(Boolean) : [])
+  )
+
+export const fetchLessonsByModule = (token, moduleId, signal) =>
+  request(`/lessons/module/${moduleId}`, { token, signal }, 'Failed to load module lessons.').then(
+    (data) => (Array.isArray(data) ? data.map(normalizeLesson).filter(Boolean) : [])
+  )
+
+export const createModule = (token, payload) =>
+  request('/modules', { method: 'POST', token, body: payload }, 'Failed to create module.').then(
+    normalizeModule
+  )
+
+export const createLesson = (token, payload) =>
+  request('/lessons', { method: 'POST', token, body: payload }, 'Failed to create lesson.').then(
+    normalizeLesson
   )
 
 export const requestVideoUploadUrl = (token, payload) =>

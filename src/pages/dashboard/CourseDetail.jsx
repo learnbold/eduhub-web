@@ -5,6 +5,13 @@ import {
   fetchManagedCourseById,
   fetchManagedCourseVideos,
   formatPrice,
+  publishCourse,
+  updateCourse,
+  archiveCourse,
+  fetchModulesByCourse,
+  fetchLessonsByModule,
+  createModule,
+  createLesson,
 } from '../../utils/dashboardApi'
 
 function CourseDetail() {
@@ -18,6 +25,76 @@ function CourseDetail() {
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editValues, setEditValues] = useState({
+    title: routeCourse?.title || '',
+    description: routeCourse?.description || '',
+    price: routeCourse?.price ?? 0,
+    thumbnail: routeCourse?.thumbnail || '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+
+  const [outlineLoading, setOutlineLoading] = useState(false)
+  const [outlineError, setOutlineError] = useState('')
+  const [modulesOutline, setModulesOutline] = useState([])
+  const [expandedModuleId, setExpandedModuleId] = useState(null)
+  const [showAddModuleForm, setShowAddModuleForm] = useState(false)
+  const [moduleFormValues, setModuleFormValues] = useState({
+    title: '',
+    description: '',
+  })
+  const [creatingModule, setCreatingModule] = useState(false)
+  const [openLessonFormFor, setOpenLessonFormFor] = useState(null)
+  const [lessonFormValues, setLessonFormValues] = useState({
+    title: '',
+    videoUrl: '',
+    duration: '',
+    isPreview: false,
+  })
+  const [creatingLesson, setCreatingLesson] = useState(false)
+
+  const refreshCourseOutline = async (signal) => {
+    if (!token || !id) {
+      setModulesOutline([])
+      return
+    }
+
+    setOutlineLoading(true)
+    setOutlineError('')
+
+    try {
+      const nextModules = await fetchModulesByCourse(token, id, signal)
+      if (signal?.aborted) return
+
+      const nextModulesWithLessons = await Promise.all(
+        (nextModules || []).map(async (moduleDoc) => {
+          const lessons = await fetchLessonsByModule(token, moduleDoc._id, signal)
+          return {
+            ...moduleDoc,
+            lessons,
+          }
+        })
+      )
+
+      if (signal?.aborted) return
+      setModulesOutline(nextModulesWithLessons)
+      if (nextModulesWithLessons?.length) {
+        setExpandedModuleId((currentId) => (currentId ? currentId : nextModulesWithLessons[0]._id))
+      }
+    } catch (outlineLoadError) {
+      if (!signal?.aborted) {
+        setModulesOutline([])
+        setOutlineError(outlineLoadError.message || 'Failed to load course outline.')
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setOutlineLoading(false)
+      }
+    }
+  }
 
   useEffect(() => {
     if (!hub?._id) {
@@ -42,6 +119,14 @@ function CourseDetail() {
 
         setCourse(nextCourse)
         setVideos(nextVideos)
+        setEditValues({
+          title: nextCourse.title || '',
+          description: nextCourse.description || '',
+          price: nextCourse.price ?? 0,
+          thumbnail: nextCourse.thumbnail || '',
+        })
+
+        await refreshCourseOutline(controller.signal)
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setCourse(null)
@@ -61,6 +146,9 @@ function CourseDetail() {
   }, [hub?._id, id, token])
 
   const basePath = `/hub/${hub.slug}/dashboard`
+  const isPublished = course?.status === 'published' || course?.isPublished
+  const canPublish = !publishing && !isPublished && videos.length > 0
+  const isArchived = course?.status === 'archived'
 
   if (loading && !course) {
     return (
@@ -102,11 +190,23 @@ function CourseDetail() {
             >
               Add Video
             </Link>
+            <button
+              type="button"
+              className="dashboard-button--ghost"
+              onClick={() => {
+                setEditing((value) => !value)
+                setSuccess('')
+                setError('')
+              }}
+            >
+              {editing ? 'Cancel Edit' : 'Edit Course'}
+            </button>
           </div>
         </div>
       </section>
 
       {error ? <p className="dashboard-alert">{error}</p> : null}
+      {success ? <p className="dashboard-success">{success}</p> : null}
 
       <section className="dashboard-hero">
         <article className="dashboard-panel">
@@ -125,8 +225,14 @@ function CourseDetail() {
             </div>
             <div>
               <span>Status</span>
-              <strong>{course.isPublished ? 'Published' : 'Draft'}</strong>
+              <strong>{isArchived ? 'Archived' : isPublished ? 'Published' : 'Draft'}</strong>
             </div>
+            {course.publishedAt ? (
+              <div>
+                <span>Published</span>
+                <strong>{new Date(course.publishedAt).toLocaleDateString()}</strong>
+              </div>
+            ) : null}
           </div>
 
           <div className="dashboard-inline-actions">
@@ -140,11 +246,144 @@ function CourseDetail() {
             >
               Upload Another Video
             </Link>
+            <button
+              type="button"
+              className="dashboard-button"
+              disabled={!canPublish}
+              title={
+                isPublished
+                  ? 'This course is already published.'
+                  : videos.length === 0
+                    ? 'Upload at least one video before publishing.'
+                    : undefined
+              }
+              onClick={async () => {
+                if (!course?._id || !canPublish) return
+                setError('')
+                setSuccess('')
+                try {
+                  setPublishing(true)
+                  const nextCourse = await publishCourse(token, course._id)
+                  setCourse(nextCourse)
+                  setSuccess('Course published successfully. It is now publicly visible.')
+                } catch (publishError) {
+                  setError(publishError.message || 'Failed to publish course.')
+                } finally {
+                  setPublishing(false)
+                }
+              }}
+            >
+              {publishing ? 'Publishing...' : isPublished ? 'Published' : 'Publish Course'}
+            </button>
+            <button
+              type="button"
+              className="dashboard-button--ghost"
+              disabled={archiving || isArchived}
+              onClick={async () => {
+                if (!course?._id || isArchived) return
+                setError('')
+                setSuccess('')
+                try {
+                  setArchiving(true)
+                  const nextCourse = await archiveCourse(token, course._id)
+                  setCourse(nextCourse)
+                  setSuccess('Course archived. It is no longer publicly visible.')
+                } catch (archiveError) {
+                  setError(archiveError.message || 'Failed to archive course.')
+                } finally {
+                  setArchiving(false)
+                }
+              }}
+            >
+              {archiving ? 'Archiving...' : isArchived ? 'Archived' : 'Archive Course'}
+            </button>
           </div>
         </article>
 
         <article className="dashboard-panel dashboard-hero__panel">
-          {course.thumbnail ? (
+          {editing ? (
+            <form
+              className="dashboard-form"
+              onSubmit={async (event) => {
+                event.preventDefault()
+                if (!course?._id || savingEdit) return
+                setError('')
+                setSuccess('')
+                try {
+                  setSavingEdit(true)
+                  const payload = {
+                    title: editValues.title,
+                    description: editValues.description,
+                    price: Number(editValues.price ?? 0),
+                    thumbnail: editValues.thumbnail,
+                  }
+                  const nextCourse = await updateCourse(token, course._id, payload)
+                  setCourse(nextCourse)
+                  setEditValues({
+                    title: nextCourse.title || '',
+                    description: nextCourse.description || '',
+                    price: nextCourse.price ?? 0,
+                    thumbnail: nextCourse.thumbnail || '',
+                  })
+                  setEditing(false)
+                  setSuccess('Course details updated successfully.')
+                } catch (updateError) {
+                  setError(updateError.message || 'Failed to update course.')
+                } finally {
+                  setSavingEdit(false)
+                }
+              }}
+            >
+              <label className="dashboard-field">
+                <span>Title</span>
+                <input
+                  type="text"
+                  value={editValues.title}
+                  onChange={(event) =>
+                    setEditValues((current) => ({ ...current, title: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="dashboard-field">
+                <span>Description</span>
+                <textarea
+                  value={editValues.description}
+                  onChange={(event) =>
+                    setEditValues((current) => ({ ...current, description: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="dashboard-field">
+                <span>Price</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editValues.price}
+                  onChange={(event) =>
+                    setEditValues((current) => ({ ...current, price: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="dashboard-field">
+                <span>Thumbnail URL</span>
+                <input
+                  type="text"
+                  value={editValues.thumbnail}
+                  onChange={(event) =>
+                    setEditValues((current) => ({ ...current, thumbnail: event.target.value }))
+                  }
+                  placeholder="https://..."
+                />
+              </label>
+              <div className="dashboard-inline-actions">
+                <button type="submit" className="dashboard-button" disabled={savingEdit}>
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          ) : course.thumbnail ? (
             <div className="dashboard-cover">
               <img src={course.thumbnail} alt={`${course.title} thumbnail`} />
             </div>
@@ -207,6 +446,307 @@ function CourseDetail() {
               </article>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="dashboard-panel">
+        <div className="dashboard-page__header">
+          <div>
+            <p className="dashboard-section-kicker">Course Outline</p>
+            <h2>Modules and lessons</h2>
+            <p>Organize your course into modules, then add lessons inside each module.</p>
+          </div>
+          <div className="dashboard-page__actions">
+            <button
+              type="button"
+              className="dashboard-button--ghost"
+              onClick={() => {
+                setShowAddModuleForm((value) => !value)
+                setModuleFormValues({ title: '', description: '' })
+              }}
+            >
+              {showAddModuleForm ? 'Cancel Module Form' : 'Add Module'}
+            </button>
+          </div>
+        </div>
+
+        {outlineError ? <p className="dashboard-alert">{outlineError}</p> : null}
+
+        {outlineLoading ? (
+          <div className="dashboard-empty">
+            <p className="dashboard-muted">Loading course outline...</p>
+          </div>
+        ) : modulesOutline.length === 0 ? (
+          <div className="dashboard-empty">
+            <h3>No modules yet</h3>
+            <p>Create your first module to start building the course outline.</p>
+          </div>
+        ) : (
+          <>
+            {showAddModuleForm ? (
+              <form
+                className="dashboard-form"
+                onSubmit={async (event) => {
+                  event.preventDefault()
+                  if (!course?._id || creatingModule) return
+
+                  setError('')
+                  setSuccess('')
+                  try {
+                    setCreatingModule(true)
+                    const created = await createModule(token, {
+                      courseId: course._id,
+                      title: moduleFormValues.title,
+                      description: moduleFormValues.description,
+                    })
+
+                    setSuccess(`Module "${created.title || 'Untitled'}" created successfully.`)
+                    setShowAddModuleForm(false)
+                    setModuleFormValues({ title: '', description: '' })
+                    setExpandedModuleId(created._id || null)
+                    await refreshCourseOutline()
+                  } catch (createError) {
+                    setError(createError.message || 'Failed to create module.')
+                  } finally {
+                    setCreatingModule(false)
+                  }
+                }}
+              >
+                <div className="dashboard-form__grid">
+                  <label className="dashboard-field">
+                    <span>Title</span>
+                    <input
+                      type="text"
+                      value={moduleFormValues.title}
+                      onChange={(event) =>
+                        setModuleFormValues((current) => ({ ...current, title: event.target.value }))
+                      }
+                      required
+                    />
+                  </label>
+                </div>
+                <label className="dashboard-field">
+                  <span>Description</span>
+                  <textarea
+                    value={moduleFormValues.description}
+                    onChange={(event) =>
+                      setModuleFormValues((current) => ({ ...current, description: event.target.value }))
+                    }
+                  />
+                </label>
+                <div className="dashboard-inline-actions">
+                  <button type="submit" className="dashboard-button" disabled={creatingModule}>
+                    {creatingModule ? 'Creating...' : 'Create Module'}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            <div className="dashboard-grid dashboard-grid--modules">
+              {modulesOutline.map((moduleDoc) => {
+                const expanded = expandedModuleId === moduleDoc._id
+                return (
+                  <article key={moduleDoc._id} className="dashboard-panel">
+                    <div className="dashboard-page__header">
+                      <div>
+                        <p className="dashboard-section-kicker">
+                          Module {moduleDoc.position !== undefined ? moduleDoc.position + 1 : ''}
+                        </p>
+                        <h3>{moduleDoc.title || 'Untitled module'}</h3>
+                      </div>
+                      <div className="dashboard-page__actions">
+                        <button
+                          type="button"
+                          className="dashboard-button--ghost"
+                          onClick={() => {
+                            setExpandedModuleId((currentId) => (expanded ? null : moduleDoc._id))
+                          }}
+                        >
+                          {expanded ? 'Collapse' : 'Expand'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {expanded ? (
+                      <>
+                        {moduleDoc.description ? (
+                          <p className="dashboard-muted" style={{ marginTop: '-8px' }}>
+                            {moduleDoc.description}
+                          </p>
+                        ) : null}
+
+                        <div className="dashboard-inline-actions" style={{ marginTop: '12px' }}>
+                          <button
+                            type="button"
+                            className="dashboard-button--ghost"
+                            disabled={creatingLesson}
+                            onClick={() => {
+                              setOpenLessonFormFor((current) =>
+                                current === moduleDoc._id ? null : moduleDoc._id
+                              )
+                              setLessonFormValues({
+                                title: '',
+                                videoUrl: '',
+                                duration: '',
+                                isPreview: false,
+                              })
+                            }}
+                          >
+                            {openLessonFormFor === moduleDoc._id ? 'Cancel Lesson Form' : 'Add Lesson'}
+                          </button>
+                        </div>
+
+                        {openLessonFormFor === moduleDoc._id ? (
+                          <form
+                            className="dashboard-form"
+                            onSubmit={async (event) => {
+                              event.preventDefault()
+                              if (!course?._id || creatingLesson) return
+
+                              setError('')
+                              setSuccess('')
+                              try {
+                                setCreatingLesson(true)
+                                const durationNumber =
+                                  lessonFormValues.duration === ''
+                                    ? undefined
+                                    : Number(lessonFormValues.duration)
+
+                                const createdLesson = await createLesson(token, {
+                                  moduleId: moduleDoc._id,
+                                  courseId: course._id,
+                                  title: lessonFormValues.title,
+                                  videoUrl: lessonFormValues.videoUrl || '',
+                                  duration: durationNumber,
+                                  isPreview: Boolean(lessonFormValues.isPreview),
+                                })
+
+                                setSuccess(
+                                  `Lesson "${createdLesson.title || 'Untitled'}" added to "${moduleDoc.title || 'module'}".`
+                                )
+                                setOpenLessonFormFor(null)
+                                setLessonFormValues({
+                                  title: '',
+                                  videoUrl: '',
+                                  duration: '',
+                                  isPreview: false,
+                                })
+                                await refreshCourseOutline()
+                              } catch (createError) {
+                                setError(createError.message || 'Failed to create lesson.')
+                              } finally {
+                                setCreatingLesson(false)
+                              }
+                            }}
+                          >
+                            <label className="dashboard-field">
+                              <span>Title</span>
+                              <input
+                                type="text"
+                                value={lessonFormValues.title}
+                                onChange={(event) =>
+                                  setLessonFormValues((current) => ({
+                                    ...current,
+                                    title: event.target.value,
+                                  }))
+                                }
+                                required
+                              />
+                            </label>
+
+                            <label className="dashboard-field">
+                              <span>Video URL</span>
+                              <input
+                                type="text"
+                                value={lessonFormValues.videoUrl}
+                                onChange={(event) =>
+                                  setLessonFormValues((current) => ({
+                                    ...current,
+                                    videoUrl: event.target.value,
+                                  }))
+                                }
+                                placeholder="https://..."
+                              />
+                            </label>
+
+                            <div className="dashboard-form__grid">
+                              <label className="dashboard-field">
+                                <span>Duration (seconds)</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={lessonFormValues.duration}
+                                  onChange={(event) =>
+                                    setLessonFormValues((current) => ({
+                                      ...current,
+                                      duration: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+
+                              <label className="dashboard-field">
+                                <span>Preview</span>
+                                <input
+                                  type="checkbox"
+                                  checked={lessonFormValues.isPreview}
+                                  onChange={(event) =>
+                                    setLessonFormValues((current) => ({
+                                      ...current,
+                                      isPreview: event.target.checked,
+                                    }))
+                                  }
+                                />
+                              </label>
+                            </div>
+
+                            <div className="dashboard-inline-actions">
+                              <button type="submit" className="dashboard-button" disabled={creatingLesson}>
+                                {creatingLesson ? 'Adding...' : 'Add Lesson'}
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
+
+                        <div className="dashboard-grid dashboard-grid--lessons" style={{ marginTop: '14px' }}>
+                          {moduleDoc.lessons?.length ? (
+                            moduleDoc.lessons.map((lesson) => (
+                              <article key={lesson._id} className="dashboard-panel">
+                                <div className="dashboard-page__header">
+                                  <div>
+                                    <h3>{lesson.title || 'Untitled lesson'}</h3>
+                                  </div>
+                                  <div className="dashboard-page__actions">
+                                    {lesson.isPreview ? (
+                                      <span className="dashboard-pill dashboard-pill--neutral">Preview</span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <p className="dashboard-muted">
+                                  Duration:{' '}
+                                  <strong>
+                                    {lesson.duration !== null && lesson.duration !== undefined
+                                      ? `${lesson.duration}s`
+                                      : '—'}
+                                  </strong>
+                                </p>
+                              </article>
+                            ))
+                          ) : (
+                            <div className="dashboard-empty">
+                              <h3>No lessons yet</h3>
+                              <p>Add your first lesson to this module.</p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : null}
+                  </article>
+                )
+              })}
+            </div>
+          </>
         )}
       </section>
     </div>
