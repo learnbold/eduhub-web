@@ -76,7 +76,7 @@ function Home() {
             <div className="hero-copy">
               <h1 className="hero-title">Learn Without Limits</h1>
               <p className="hero-subtitle">
-                Build skills with structured courses from top educators. Discover the tools you need to move your career forward.
+                Build skills with structured courses from top educators. Discover the tools you need to move your career forward on Sparklass.
               </p>
               
               <div className="hero-search-container">
@@ -99,16 +99,40 @@ function Home() {
             
             <div className="hero-visual" aria-hidden="true">
               <div className="hero-glow"></div>
-              <div className="hero-floating-cards">
-                {featuredCourses.slice(0, 2).map((course, idx) => (
-                  <div key={course.id || idx} className={`hero-float-card hero-float-card--${idx + 1}`}>
-                    <img src={course.thumbnail} alt="" className="hero-float-img" />
-                    <div className="hero-float-info">
-                      <strong>{course.title}</strong>
-                      <span>{course.instructor}</span>
-                    </div>
+              <div className="brand-ecosystem">
+                {/* Center Brand Logo/Text */}
+                <div className="brand-center">
+                  <span className="brand-mark">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="#ffffff" stroke="none" />
+                    </svg>
+                  </span>
+                </div>
+                
+                {/* Floating Elements Around */}
+                <div className="float-element float-element--1 glass-panel">
+                  <div className="mock-video-player">
+                    <div className="mock-video-play-button"></div>
+                    <div className="mock-video-progress"></div>
                   </div>
-                ))}
+                </div>
+                
+                <div className="float-element float-element--2 glass-panel">
+                  <div className="mock-lesson-list">
+                    <div className="mock-lesson-item active"></div>
+                    <div className="mock-lesson-item"></div>
+                    <div className="mock-lesson-item"></div>
+                    <div className="mock-lesson-item"></div>
+                  </div>
+                </div>
+                
+                <div className="float-element float-element--3 glass-panel">
+                  <div className="mock-course-card">
+                    <div className="mock-course-img"></div>
+                    <div className="mock-course-text"></div>
+                    <div className="mock-course-text short"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

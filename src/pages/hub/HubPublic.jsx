@@ -120,7 +120,7 @@ function HubPublic() {
                   <div>
                     <p className="hub-public-kicker">Teacher Hub</p>
                     <h1>{hub.name}</h1>
-                    <p>{hub.description || `${ownerName}'s personal teaching hub on EduHub.`}</p>
+                    <p>{hub.description || `${ownerName}'s personal teaching hub on Sparklass.`}</p>
                   </div>
                 </div>
 
@@ -250,7 +250,7 @@ function HubPublic() {
                   {teacherRoster.map((member) => (
                     <article key={member._id} className="hub-public-member">
                       <strong>{member.displayName}</strong>
-                      <p>{member.email || member.username || 'EduHub teacher'}</p>
+                      <p>{member.email || member.username || 'Sparklass teacher'}</p>
                     </article>
                   ))}
                 </div>

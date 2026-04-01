@@ -276,7 +276,7 @@ function UploadVideo() {
               <span>Video File</span>
               <input type="file" accept="video/*" onChange={handleFileChange} required />
               <small className="dashboard-file-meta">
-                EduHub generates a signed upload URL first, stores the video, and then starts
+                Sparklass generates a signed upload URL first, stores the video, and then starts
                 processing.
               </small>
             </label>
