@@ -79,7 +79,7 @@ function DashboardHome() {
     loadOverview()
 
     return () => controller.abort()
-  }, [hub?._id, memberRole, token])
+  }, [hub?._id, hub?.ownerProfile, memberRole, token])
 
   const hubDashboardBasePath = `/hub/${hub.slug}/dashboard`
   const ownerName = hub.ownerProfile?.displayName || hub.name

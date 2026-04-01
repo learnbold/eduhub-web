@@ -98,14 +98,40 @@ export const normalizeLesson = (lesson) => {
     return null
   }
 
+  const normalizedVideo =
+    lesson.video && typeof lesson.video === 'object'
+      ? normalizeVideo(lesson.video)
+      : lesson.videoId && typeof lesson.videoId === 'object'
+        ? normalizeVideo(lesson.videoId)
+        : null
+
+  const resolvedVideoId =
+    typeof lesson.videoId === 'string'
+      ? lesson.videoId
+      : lesson.videoId?._id || normalizedVideo?._id || ''
+
+  const legacyVideoUrl = lesson.videoUrl || ''
+  const resolvedDuration =
+    lesson.duration === undefined || lesson.duration === null
+      ? normalizedVideo?.duration ?? null
+      : Number(lesson.duration)
+
   return {
     ...lesson,
     _id: lesson._id || lesson.id || '',
     moduleId: lesson.moduleId || '',
     courseId: lesson.courseId || '',
-    duration: lesson.duration === undefined || lesson.duration === null ? null : Number(lesson.duration),
+    title: lesson.title || normalizedVideo?.title || '',
+    videoId: resolvedVideoId,
+    video: normalizedVideo,
+    // Deprecated legacy fallback. Prefer lesson.video?.url for new code paths.
+    videoUrl: legacyVideoUrl,
+    hlsUrl: normalizedVideo?.hlsUrl || lesson.hlsUrl || '',
+    duration: resolvedDuration,
     position: Number(lesson.position || 0),
     isPreview: Boolean(lesson.isPreview),
+    videoStatus: normalizedVideo?.status || lesson.videoStatus || '',
+    hasAttachedVideo: Boolean(resolvedVideoId || normalizedVideo?.url || legacyVideoUrl),
   }
 }
 
@@ -119,6 +145,11 @@ export const normalizeVideo = (video) => {
     _id: video._id || video.id || '',
     videoType: video.videoType || 'course',
     order: Number(video.order || 0),
+    duration: video.duration === undefined || video.duration === null ? null : Number(video.duration),
+    videoUrl: video.videoUrl || '',
+    hlsUrl: video.hlsUrl || '',
+    url: video.url || video.hlsUrl || video.videoUrl || '',
+    status: video.status || 'uploading',
   }
 }
 
@@ -210,6 +241,9 @@ export const fetchPublicHubCourses = (hubId, signal) =>
   request(`/courses/hub/${hubId}`, { signal }, 'Failed to load public hub courses.').then((data) =>
     (Array.isArray(data) ? data : []).map(normalizeCourse).filter(Boolean)
   )
+
+export const fetchPublicCourseBySlug = (slug, signal) =>
+  request(`/courses/${slug}`, { signal }, 'Failed to load course details.').then(normalizeCourse)
 
 export const fetchManagedHubCourses = (token, hubId, signal) =>
   request(`/courses/hub/${hubId}/manage`, { token, signal }, 'Failed to load hub courses.').then(
@@ -314,6 +348,13 @@ export const createLesson = (token, payload) =>
   request('/lessons', { method: 'POST', token, body: payload }, 'Failed to create lesson.').then(
     normalizeLesson
   )
+
+export const attachLessonVideo = (token, lessonId, videoId) =>
+  request(
+    `/lessons/${lessonId}/attach-video`,
+    { method: 'PATCH', token, body: { videoId } },
+    'Failed to attach video to lesson.'
+  ).then(normalizeLesson)
 
 export const requestVideoUploadUrl = (token, payload) =>
   request(

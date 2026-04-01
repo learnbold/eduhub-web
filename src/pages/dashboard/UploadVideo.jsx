@@ -24,6 +24,8 @@ function UploadVideo() {
   const { token } = useAuth()
   const { hub } = useOutletContext()
   const routeCourse = location.state?.course || null
+  const routeLesson = location.state?.lesson || null
+  const selectedLessonId = searchParams.get('lessonId') || routeLesson?._id || ''
 
   const [courses, setCourses] = useState([])
   const [formValues, setFormValues] = useState(initialFormValues)
@@ -52,13 +54,15 @@ function UploadVideo() {
           return
         }
 
-        const selectedType = searchParams.get('type') === 'standalone' ? 'standalone' : 'course'
+        const selectedType =
+          selectedLessonId || searchParams.get('type') !== 'standalone' ? 'course' : 'standalone'
         const selectedCourseId =
           searchParams.get('courseId') || routeCourse?._id || nextCourses[0]?._id || ''
 
         setCourses(nextCourses)
         setFormValues((currentValues) => ({
           ...currentValues,
+          title: currentValues.title || routeLesson?.title || '',
           videoType: selectedType,
           courseId: currentValues.courseId || selectedCourseId,
         }))
@@ -77,7 +81,7 @@ function UploadVideo() {
     loadCourses()
 
     return () => controller.abort()
-  }, [hub?._id, routeCourse, searchParams, token])
+  }, [hub?._id, routeCourse, routeLesson, searchParams, selectedLessonId, token])
 
   const basePath = `/hub/${hub.slug}/dashboard`
   const selectedCourse = courses.find((course) => course._id === formValues.courseId) || routeCourse
@@ -125,6 +129,7 @@ function UploadVideo() {
         title: formValues.title,
         description: formValues.description,
         courseId: isStandalone ? undefined : formValues.courseId,
+        lessonId: isStandalone ? undefined : selectedLessonId || undefined,
         hubId: hub._id,
         videoUrl: fileUrl,
         videoType: formValues.videoType,
@@ -167,6 +172,11 @@ function UploadVideo() {
             <p>
               Publish course lessons or standalone hub updates from the same creator workflow.
             </p>
+            {selectedLessonId ? (
+              <p>
+                This upload will attach directly to <strong>{routeLesson?.title || 'the selected lesson'}</strong>.
+              </p>
+            ) : null}
           </div>
           <div className="dashboard-page__actions">
             <Link to={`${basePath}/videos`} className="dashboard-button--ghost">
@@ -190,7 +200,12 @@ function UploadVideo() {
             <div className="dashboard-form__grid">
               <label className="dashboard-field">
                 <span>Video Type</span>
-                <select name="videoType" value={formValues.videoType} onChange={handleChange}>
+                <select
+                  name="videoType"
+                  value={formValues.videoType}
+                  onChange={handleChange}
+                  disabled={Boolean(selectedLessonId)}
+                >
                   <option value="course">Course Video</option>
                   <option value="standalone">Standalone Hub Update</option>
                 </select>
@@ -228,6 +243,7 @@ function UploadVideo() {
                     value={formValues.courseId}
                     onChange={handleChange}
                     required={!isStandalone}
+                    disabled={Boolean(selectedLessonId)}
                   >
                     <option value="" disabled>
                       Select a course
@@ -267,7 +283,13 @@ function UploadVideo() {
 
             <div className="dashboard-info">
               Upload target:{' '}
-              <strong>{isStandalone ? `${hub.name} public hub feed` : selectedCourse?.title || 'Course'}</strong>
+              <strong>
+                {isStandalone
+                  ? `${hub.name} public hub feed`
+                  : selectedLessonId
+                    ? `${selectedCourse?.title || 'Course'} -> ${routeLesson?.title || 'Selected lesson'}`
+                    : selectedCourse?.title || 'Course'}
+              </strong>
             </div>
 
             <div className="dashboard-inline-actions">
