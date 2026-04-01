@@ -1,0 +1,109 @@
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-2xl, 1.5rem);
+  background: var(--bg-card, #121826);
+  border: 1px solid var(--border-subtle, #1e293b);
+  box-shadow: var(--shadow-soft, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  height: 100%;
+}
+
+.hub-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
+  border-color: var(--border-focus, #334155);
+}
+
+.hub-card__banner {
+  position: relative;
+  height: 120px;
+  background: var(--bg-hover, #1f2937);
+  margin-bottom: 32px; /* make room for logo */
+}
+
+.hub-card__banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hub-card__logo-wrapper {
+  position: absolute;
+  bottom: -28px;
+  left: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--bg-card, #121826);
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.hub-card__logo-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #ffffff;
+}
+
+.hub-card__body {
+  padding: 0 20px 20px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.hub-card__title {
+  margin: 0 0 8px;
+  color: var(--text-primary, #ffffff);
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.hub-card__description {
+  margin: 0 0 16px;
+  color: var(--text-secondary, #9ca3af);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hub-card__meta {
+  margin-top: auto;
+  margin-bottom: 16px;
+}
+
+.hub-card__courses-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-tertiary, #64748b);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hub-card__cta {
+  width: 100%;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: var(--text-primary, #ffffff);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hub-card__cta:hover {
+  background: var(--text-primary, #ffffff);
+  color: var(--bg-dark, #0b0f19);
+}
