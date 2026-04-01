@@ -22,7 +22,7 @@ const buildDisplayName = (person) => {
     [person.firstName, person.lastName].filter(Boolean).join(' ').trim() ||
     person.username ||
     person.email ||
-    'EduHub Member'
+    'Sparklass Member'
   )
 }
 

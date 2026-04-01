@@ -92,7 +92,7 @@ function Login() {
         </form>
 
         <p className="auth-footer">
-          New to EduHub? <Link to="/register">Create an account</Link>
+          New to Sparklass? <Link to="/register">Create an account</Link>
         </p>
       </section>
     </main>

@@ -124,7 +124,7 @@ function HubTeamManagement() {
           {members.map((member) => (
             <article key={member._id} className="dashboard-member-card">
               <strong>{member.displayName}</strong>
-              <p className="dashboard-muted">{member.email || member.username || 'EduHub member'}</p>
+              <p className="dashboard-muted">{member.email || member.username || 'Sparklass member'}</p>
             </article>
           ))}
         </div>

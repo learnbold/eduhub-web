@@ -1,2 +1,2 @@
-# eduhub-web
-it is the web frontend of eduhub
+# sparklass-web
+it is the web frontend of sparklass

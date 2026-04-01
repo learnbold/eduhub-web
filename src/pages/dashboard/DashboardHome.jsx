@@ -144,7 +144,7 @@ function DashboardHome() {
           <p className="dashboard-section-kicker">Identity</p>
           <h2>{hub.name}</h2>
           <p className="dashboard-muted">
-            {hub.description || `${ownerName}'s branded hub on EduHub.`}
+            {hub.description || `${ownerName}'s branded hub on Sparklass.`}
           </p>
 
           <div className="dashboard-detail-grid">
