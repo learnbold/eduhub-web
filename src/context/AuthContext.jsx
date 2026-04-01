@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 const TOKEN_STORAGE_KEY = 'token'
@@ -106,7 +106,7 @@ export function AuthProvider({ children }) {
   const [hub, setHub] = useState(() => parseStoredValue(HUB_STORAGE_KEY))
   const [isHubLoading, setIsHubLoading] = useState(false)
 
-  const persistHub = (nextHub) => {
+  const persistHub = useCallback((nextHub) => {
     setHub(nextHub || null)
 
     if (nextHub) {
@@ -114,13 +114,13 @@ export function AuthProvider({ children }) {
     } else {
       localStorage.removeItem(HUB_STORAGE_KEY)
     }
-  }
+  }, [])
 
-  const updateStoredHub = (nextHub) => {
+  const updateStoredHub = useCallback((nextHub) => {
     persistHub(nextHub)
-  }
+  }, [persistHub])
 
-  const persistAuth = (authPayload) => {
+  const persistAuth = useCallback((authPayload) => {
     const nextToken = authPayload?.token || ''
     const nextUser = authPayload?.user || null
     const hasHub = Object.prototype.hasOwnProperty.call(authPayload || {}, 'hub')
@@ -145,23 +145,23 @@ export function AuthProvider({ children }) {
     } else {
       persistHub(null)
     }
-  }
+  }, [persistHub])
 
-  const login = async ({ email, password }) => {
+  const login = useCallback(async ({ email, password }) => {
     const authPayload = await requestAuth('/auth/login', { email, password })
 
     persistAuth(authPayload)
     return authPayload
-  }
+  }, [persistAuth])
 
-  const register = async ({ name, email, password }) => {
+  const register = useCallback(async ({ name, email, password }) => {
     const authPayload = await requestAuth('/auth/register', { name, email, password })
 
     persistAuth(authPayload)
     return authPayload
-  }
+  }, [persistAuth])
 
-  const loadTeacherHub = async ({ force = false, signal } = {}) => {
+  const loadTeacherHub = useCallback(async ({ force = false, signal } = {}) => {
     if (!token) {
       throw new Error('Login required to load your hub.')
     }
@@ -189,9 +189,9 @@ export function AuthProvider({ children }) {
     } finally {
       setIsHubLoading(false)
     }
-  }
+  }, [hub, persistHub, token, user?.role])
 
-  const becomeTeacher = async () => {
+  const becomeTeacher = useCallback(async () => {
     if (!token) {
       throw new Error('Login required to become a teacher.')
     }
@@ -211,11 +211,11 @@ export function AuthProvider({ children }) {
     })
 
     return responseBody
-  }
+  }, [persistAuth, token])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     persistAuth({ token: '', user: null, hub: null })
-  }
+  }, [persistAuth])
 
   useEffect(() => {
     if (!token || user?.role !== 'teacher' || hub) {
@@ -231,7 +231,7 @@ export function AuthProvider({ children }) {
     loadTeacherHub({ signal: controller.signal }).catch(() => {})
 
     return () => controller.abort()
-  }, [token, user?.role, hub])
+  }, [hub, loadTeacherHub, persistHub, token, user?.role])
 
   const value = useMemo(
     () => ({
@@ -247,12 +247,13 @@ export function AuthProvider({ children }) {
       updateStoredHub,
       logout,
     }),
-    [token, user, hub, isHubLoading]
+    [becomeTeacher, hub, isHubLoading, loadTeacherHub, login, logout, register, token, updateStoredHub, user]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext)
 

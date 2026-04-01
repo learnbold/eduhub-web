@@ -6,6 +6,7 @@ import Course from './pages/Course'
 import Login from './pages/Login'
 import Player from './pages/Player'
 import Register from './pages/Register'
+import CoursePlayer from './pages/course/CoursePlayer'
 import DashboardHome from './pages/dashboard/DashboardHome'
 import CoursesList from './pages/dashboard/CoursesList'
 import CreateCourse from './pages/dashboard/CreateCourse'
@@ -30,6 +31,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route element={<ProtectedRoute />}>
+        <Route path="/course/:slug/learn" element={<CoursePlayer />} />
         <Route path="/player/:courseId" element={<Player />} />
       </Route>
       <Route element={<ProtectedRoute requireTeacher />}>

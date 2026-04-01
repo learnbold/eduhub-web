@@ -1,20 +1,27 @@
 import { useEffect, useRef } from 'react'
 import './VideoPlayer.css'
 
-function VideoPlayer({ video }) {
+function VideoPlayer({ video, onEnded }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
     const element = videoRef.current
+    const sourceUrl = video?.url || video?.hlsUrl || video?.videoUrl
 
-    if (!element || !video?.hlsUrl) {
+    if (!element || !sourceUrl) {
       return undefined
     }
 
     let hls
     let isDisposed = false
+    const shouldUseHls = Boolean(video?.hlsUrl || sourceUrl?.includes('.m3u8'))
 
     const loadStream = async () => {
+      if (!shouldUseHls) {
+        element.src = sourceUrl
+        return
+      }
+
       const { default: Hls } = await import('hls.js/light')
 
       if (isDisposed) {
@@ -26,10 +33,10 @@ function VideoPlayer({ video }) {
           enableWorker: true,
           lowLatencyMode: true,
         })
-        hls.loadSource(video.hlsUrl)
+        hls.loadSource(sourceUrl)
         hls.attachMedia(element)
       } else if (element.canPlayType('application/vnd.apple.mpegurl')) {
-        element.src = video.hlsUrl
+        element.src = sourceUrl
       }
     }
 
@@ -76,6 +83,7 @@ function VideoPlayer({ video }) {
           controls
           playsInline
           autoPlay
+          onEnded={onEnded}
         />
       </div>
     </section>

@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
+  createVideo,
   fetchManagedCourseById,
   fetchManagedCourseVideos,
   formatPrice,
   publishCourse,
+  processVideo,
+  requestVideoUploadUrl,
+  getVideoFileType,
+  uploadVideoFile,
   updateCourse,
   archiveCourse,
   fetchModulesByCourse,
@@ -55,8 +60,11 @@ function CourseDetail() {
     isPreview: false,
   })
   const [creatingLesson, setCreatingLesson] = useState(false)
+  const [uploadingLessonId, setUploadingLessonId] = useState('')
+  const [lessonUploadStage, setLessonUploadStage] = useState('')
+  const lessonFileInputRefs = useRef({})
 
-  const refreshCourseOutline = async (signal) => {
+  const refreshCourseOutline = useCallback(async (signal) => {
     if (!token || !id) {
       setModulesOutline([])
       return
@@ -94,7 +102,81 @@ function CourseDetail() {
         setOutlineLoading(false)
       }
     }
-  }
+  }, [id, token])
+
+  const refreshManagedVideos = useCallback(
+    async (signal) => {
+      if (!token || !id) {
+        setVideos([])
+        return []
+      }
+
+      const nextVideos = await fetchManagedCourseVideos(token, id, signal)
+
+      if (!signal?.aborted) {
+        setVideos(nextVideos)
+      }
+
+      return nextVideos
+    },
+    [id, token]
+  )
+
+  const handleLessonVideoUpload = useCallback(
+    async (lesson, file) => {
+      if (!file || !course?._id || uploadingLessonId) {
+        return
+      }
+
+      setError('')
+      setSuccess('')
+
+      try {
+        setUploadingLessonId(lesson._id)
+
+        const fileType = getVideoFileType(file)
+
+        setLessonUploadStage('Preparing secure upload...')
+        const { uploadUrl, fileUrl } = await requestVideoUploadUrl(token, {
+          courseId: course._id,
+          hubId: hub._id,
+          fileType,
+          videoType: 'course',
+        })
+
+        setLessonUploadStage('Uploading video file...')
+        await uploadVideoFile(uploadUrl, file, fileType)
+
+        setLessonUploadStage('Saving video record...')
+        const createdVideo = await createVideo(token, {
+          title: lesson.title || file.name.replace(/\.[^.]+$/, ''),
+          description: '',
+          courseId: course._id,
+          lessonId: lesson._id,
+          hubId: hub._id,
+          videoUrl: fileUrl,
+          videoType: 'course',
+        })
+
+        setLessonUploadStage('Starting video processing...')
+        await processVideo(token, createdVideo._id)
+
+        await Promise.all([refreshCourseOutline(), refreshManagedVideos()])
+
+        setSuccess(`Video attached to "${lesson.title || 'Untitled lesson'}". Processing has started.`)
+      } catch (uploadError) {
+        setError(uploadError.message || 'Failed to upload lesson video.')
+      } finally {
+        setUploadingLessonId('')
+        setLessonUploadStage('')
+        const input = lessonFileInputRefs.current[lesson._id]
+        if (input) {
+          input.value = ''
+        }
+      }
+    },
+    [course?._id, hub?._id, refreshCourseOutline, refreshManagedVideos, token, uploadingLessonId]
+  )
 
   useEffect(() => {
     if (!hub?._id) {
@@ -110,7 +192,7 @@ function CourseDetail() {
 
         const [nextCourse, nextVideos] = await Promise.all([
           fetchManagedCourseById(token, id, controller.signal),
-          fetchManagedCourseVideos(token, id, controller.signal),
+          refreshManagedVideos(controller.signal),
         ])
 
         if (controller.signal.aborted) {
@@ -118,7 +200,7 @@ function CourseDetail() {
         }
 
         setCourse(nextCourse)
-        setVideos(nextVideos)
+        setVideos(nextVideos || [])
         setEditValues({
           title: nextCourse.title || '',
           description: nextCourse.description || '',
@@ -143,11 +225,14 @@ function CourseDetail() {
     loadPage()
 
     return () => controller.abort()
-  }, [hub?._id, id, token])
+  }, [hub?._id, id, refreshCourseOutline, refreshManagedVideos, token])
 
   const basePath = `/hub/${hub.slug}/dashboard`
   const isPublished = course?.status === 'published' || course?.isPublished
-  const canPublish = !publishing && !isPublished && videos.length > 0
+  const hasLessonVideo = modulesOutline.some((moduleDoc) =>
+    moduleDoc.lessons?.some((lesson) => lesson.hasAttachedVideo)
+  )
+  const canPublish = !publishing && !isPublished && (videos.length > 0 || hasLessonVideo)
   const isArchived = course?.status === 'archived'
 
   if (loading && !course) {
@@ -207,6 +292,7 @@ function CourseDetail() {
 
       {error ? <p className="dashboard-alert">{error}</p> : null}
       {success ? <p className="dashboard-success">{success}</p> : null}
+      {uploadingLessonId ? <p className="dashboard-info">{lessonUploadStage}</p> : null}
 
       <section className="dashboard-hero">
         <article className="dashboard-panel">
@@ -253,8 +339,8 @@ function CourseDetail() {
               title={
                 isPublished
                   ? 'This course is already published.'
-                  : videos.length === 0
-                    ? 'Upload at least one video before publishing.'
+                  : !hasLessonVideo && videos.length === 0
+                    ? 'Attach at least one lesson video before publishing.'
                     : undefined
               }
               onClick={async () => {
@@ -559,7 +645,7 @@ function CourseDetail() {
                           type="button"
                           className="dashboard-button--ghost"
                           onClick={() => {
-                            setExpandedModuleId((currentId) => (expanded ? null : moduleDoc._id))
+                            setExpandedModuleId(expanded ? null : moduleDoc._id)
                           }}
                         >
                           {expanded ? 'Collapse' : 'Expand'}
@@ -655,7 +741,7 @@ function CourseDetail() {
                             </label>
 
                             <label className="dashboard-field">
-                              <span>Video URL</span>
+                              <span>Video URL (legacy)</span>
                               <input
                                 type="text"
                                 value={lessonFormValues.videoUrl}
@@ -667,6 +753,9 @@ function CourseDetail() {
                                 }
                                 placeholder="https://..."
                               />
+                              <small className="dashboard-file-meta">
+                                Deprecated fallback. Prefer creating the lesson first and uploading a managed video.
+                              </small>
                             </label>
 
                             <div className="dashboard-form__grid">
@@ -711,13 +800,42 @@ function CourseDetail() {
 
                         <div className="dashboard-grid dashboard-grid--lessons" style={{ marginTop: '14px' }}>
                           {moduleDoc.lessons?.length ? (
-                            moduleDoc.lessons.map((lesson) => (
+                            moduleDoc.lessons.map((lesson) => {
+                              const lessonVideoUrl = lesson.video?.url || lesson.videoUrl
+                              const hasManagedVideo = Boolean(lesson.video)
+                              const hasLegacyVideo = !hasManagedVideo && Boolean(lesson.videoUrl)
+
+                              return (
                               <article key={lesson._id} className="dashboard-panel">
                                 <div className="dashboard-page__header">
                                   <div>
                                     <h3>{lesson.title || 'Untitled lesson'}</h3>
                                   </div>
                                   <div className="dashboard-page__actions">
+                                    {hasManagedVideo ? (
+                                      <span
+                                        className={
+                                          lesson.video?.status === 'ready'
+                                            ? 'dashboard-pill dashboard-pill--success'
+                                            : 'dashboard-pill dashboard-pill--warning'
+                                        }
+                                      >
+                                        {lesson.video?.status === 'ready'
+                                          ? 'Video Ready'
+                                          : lesson.video?.status || 'Video Linked'}
+                                      </span>
+                                    ) : hasLegacyVideo ? (
+                                      <span className="dashboard-pill dashboard-pill--warning">Legacy Video URL</span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="dashboard-link-button"
+                                        disabled={Boolean(uploadingLessonId)}
+                                        onClick={() => lessonFileInputRefs.current[lesson._id]?.click()}
+                                      >
+                                        {uploadingLessonId === lesson._id ? 'Uploading...' : 'Upload Video'}
+                                      </button>
+                                    )}
                                     {lesson.isPreview ? (
                                       <span className="dashboard-pill dashboard-pill--neutral">Preview</span>
                                     ) : null}
@@ -731,8 +849,51 @@ function CourseDetail() {
                                       : '—'}
                                   </strong>
                                 </p>
+                                <p className="dashboard-muted">
+                                  Video:{' '}
+                                  <strong>
+                                    {hasManagedVideo
+                                      ? lesson.video?.title || 'Managed lesson video'
+                                      : lessonVideoUrl
+                                        ? 'Legacy lesson URL attached'
+                                        : 'Not attached yet'}
+                                  </strong>
+                                </p>
+                                <input
+                                  ref={(node) => {
+                                    if (node) {
+                                      lessonFileInputRefs.current[lesson._id] = node
+                                    } else {
+                                      delete lessonFileInputRefs.current[lesson._id]
+                                    }
+                                  }}
+                                  type="file"
+                                  accept="video/*"
+                                  hidden
+                                  onChange={(event) => {
+                                    const file = event.target.files?.[0]
+                                    if (file) {
+                                      handleLessonVideoUpload(lesson, file)
+                                    }
+                                  }}
+                                />
+                                {hasLegacyVideo ? (
+                                  <div className="dashboard-inline-actions" style={{ marginTop: '12px' }}>
+                                    <button
+                                      type="button"
+                                      className="dashboard-link-button"
+                                      disabled={Boolean(uploadingLessonId)}
+                                      onClick={() => lessonFileInputRefs.current[lesson._id]?.click()}
+                                    >
+                                      {uploadingLessonId === lesson._id
+                                        ? 'Uploading...'
+                                        : 'Replace With Managed Upload'}
+                                    </button>
+                                  </div>
+                                ) : null}
                               </article>
-                            ))
+                              )
+                            })
                           ) : (
                             <div className="dashboard-empty">
                               <h3>No lessons yet</h3>

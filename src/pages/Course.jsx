@@ -5,21 +5,11 @@ import EnrollCard from '../components/EnrollCard'
 import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../context/AuthContext'
+import { fetchPublicCourseBySlug } from '../utils/dashboardApi'
 import './Course.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 const courseBadges = ['Self-paced access', 'Practical lessons', 'Premium learning path']
-
-const normalizeCourse = (data) => {
-  if (!data) {
-    return null
-  }
-
-  return {
-    ...data,
-    _id: data._id || data.id || null,
-  }
-}
 
 const getShortDescription = (description) => {
   if (!description) {
@@ -64,7 +54,7 @@ function Course() {
   const { token } = useAuth()
   const routeCourse = location.state?.course ?? null
 
-  const [course, setCourse] = useState(() => normalizeCourse(routeCourse))
+  const [course, setCourse] = useState(() => routeCourse)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isEnrolling, setIsEnrolling] = useState(false)
@@ -72,33 +62,19 @@ function Course() {
 
   useEffect(() => {
     const controller = new AbortController()
-    setCourse(normalizeCourse(routeCourse))
+    setCourse(routeCourse)
 
     const fetchCourse = async () => {
       try {
         setLoading(true)
         setError('')
 
-        const response = await fetch(`${API_BASE_URL}/courses/${slug}`, {
-          signal: controller.signal,
-        })
-
-        if (response.status === 404) {
-          setCourse(null)
-          setError('Course not found.')
-          return
-        }
-
-        if (!response.ok) {
-          throw new Error('Failed to load course details.')
-        }
-
-        const data = await response.json()
-        setCourse(normalizeCourse(data))
+        const data = await fetchPublicCourseBySlug(slug, controller.signal)
+        setCourse(data)
       } catch (fetchError) {
         if (fetchError.name !== 'AbortError') {
           setCourse(null)
-          setError('Failed to load course details. Please try again.')
+          setError(fetchError.message || 'Failed to load course details. Please try again.')
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -141,7 +117,7 @@ function Course() {
       })
 
       if (response.status === 409) {
-        navigate(`/player/${course._id}`)
+        navigate(`/course/${slug}/learn`)
         return
       }
 
@@ -155,7 +131,7 @@ function Course() {
         throw new Error(responseBody?.message || `Failed to enroll: ${response.status}`)
       }
 
-      navigate(`/player/${course._id}`)
+      navigate(`/course/${slug}/learn`)
     } catch (enrollFailure) {
       setEnrollError(
         enrollFailure.message || 'Something went wrong while starting this course.'
