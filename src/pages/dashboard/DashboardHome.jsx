@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
+  fetchManagedHubBatches,
   fetchHubActivity,
   fetchHubTeam,
   fetchManagedHubCourses,
@@ -11,10 +12,12 @@ import {
 function DashboardHome() {
   const { token } = useAuth()
   const { hub, memberRole } = useOutletContext()
+  const subscription = hub?.subscription
   const [stats, setStats] = useState({
+    batches: 0,
     courses: 0,
-    courseVideos: 0,
-    standaloneVideos: 0,
+    videos: 0,
+    students: 0,
     teamMembers: 1,
   })
   const [recentActivity, setRecentActivity] = useState([])
@@ -33,7 +36,8 @@ function DashboardHome() {
         setLoading(true)
         setError('')
 
-        const [courses, videos, team, activity] = await Promise.all([
+        const [batches, courses, videos, team, activity] = await Promise.all([
+          fetchManagedHubBatches(token, hub._id, controller.signal),
           fetchManagedHubCourses(token, hub._id, controller.signal),
           fetchManagedHubVideos(token, hub._id, controller.signal),
           memberRole === 'teacher'
@@ -48,13 +52,16 @@ function DashboardHome() {
           return
         }
 
-        const standaloneVideos = videos.filter((video) => video.videoType === 'standalone')
-        const courseVideos = videos.filter((video) => video.videoType !== 'standalone')
+        const totalBatchStudents = batches.reduce(
+          (count, batch) => count + Number(batch.studentCount || 0),
+          0
+        )
 
         setStats({
+          batches: batches.length,
           courses: courses.length,
-          courseVideos: courseVideos.length,
-          standaloneVideos: standaloneVideos.length,
+          videos: videos.length,
+          students: totalBatchStudents,
           teamMembers: 1 + (team?.admins?.length || 0) + (team?.teachers?.length || 0),
         })
         setRecentActivity(activity.slice(0, 5))
@@ -62,9 +69,10 @@ function DashboardHome() {
         if (!controller.signal.aborted) {
           setError(loadError.message || 'Failed to load your hub overview.')
           setStats({
+            batches: 0,
             courses: 0,
-            courseVideos: 0,
-            standaloneVideos: 0,
+            videos: 0,
+            students: 0,
             teamMembers: 1,
           })
           setRecentActivity([])
@@ -98,14 +106,14 @@ function DashboardHome() {
           </div>
 
           <div className="dashboard-page__actions">
-            <Link to={`${hubDashboardBasePath}/courses/create`} className="dashboard-button">
-              Create Course
+            <Link to={`${hubDashboardBasePath}/batches`} className="dashboard-button">
+              Open Batches
             </Link>
             <Link
-              to={`${hubDashboardBasePath}/videos/upload?type=standalone`}
+              to={`${hubDashboardBasePath}/courses/create`}
               className="dashboard-button--ghost"
             >
-              Post Hub Update
+              Create Course
             </Link>
           </div>
         </div>
@@ -115,27 +123,27 @@ function DashboardHome() {
 
       <section className="dashboard-grid dashboard-grid--stats" aria-label="Hub stats">
         <article className="dashboard-stat">
+          <span>Batches</span>
+          <strong>{loading ? '--' : stats.batches}</strong>
+          <p>Primary teaching offers that package access and monetization.</p>
+        </article>
+
+        <article className="dashboard-stat">
           <span>Courses</span>
           <strong>{loading ? '--' : stats.courses}</strong>
-          <p>Structured learning products inside this hub.</p>
+          <p>Reusable learning products attached to one or more batches.</p>
         </article>
 
         <article className="dashboard-stat">
-          <span>Course Videos</span>
-          <strong>{loading ? '--' : stats.courseVideos}</strong>
-          <p>Lesson videos attached to courses.</p>
+          <span>Videos</span>
+          <strong>{loading ? '--' : stats.videos}</strong>
+          <p>Lesson and standalone videos available to batch builders.</p>
         </article>
 
         <article className="dashboard-stat">
-          <span>Hub Updates</span>
-          <strong>{loading ? '--' : stats.standaloneVideos}</strong>
-          <p>Standalone videos for your public hub feed.</p>
-        </article>
-
-        <article className="dashboard-stat">
-          <span>Team Members</span>
-          <strong>{loading ? '--' : stats.teamMembers}</strong>
-          <p>Owner, admins, and teachers working in this hub.</p>
+          <span>Students</span>
+          <strong>{loading ? '--' : stats.students}</strong>
+          <p>Distinct learners currently enrolled across active batches.</p>
         </article>
       </section>
 
@@ -144,7 +152,7 @@ function DashboardHome() {
           <p className="dashboard-section-kicker">Identity</p>
           <h2>{hub.name}</h2>
           <p className="dashboard-muted">
-            {hub.description || `${ownerName}'s branded hub on Sparklass.`}
+            {hub.description || `${ownerName}'s branded batch-first teaching hub on Sparklass.`}
           </p>
 
           <div className="dashboard-detail-grid">
@@ -163,6 +171,18 @@ function DashboardHome() {
             <div>
               <span>Public URL</span>
               <strong>{`/hub/${hub.slug}`}</strong>
+            </div>
+            <div>
+              <span>Plan</span>
+              <strong>{subscription?.capabilities?.label || 'Free'}</strong>
+            </div>
+            <div>
+              <span>Batch Capacity</span>
+              <strong>
+                {subscription?.capabilities?.batchLimit === null
+                  ? 'Unlimited'
+                  : `${subscription?.usage?.activeBatchCount || 0}/${subscription?.capabilities?.batchLimit || 1}`}
+              </strong>
             </div>
           </div>
         </article>
@@ -185,6 +205,11 @@ function DashboardHome() {
                   style={{ backgroundColor: hub.secondaryColor }}
                 />
               </div>
+              <div className="dashboard-inline-actions" style={{ marginTop: 16 }}>
+                <Link to="/become-teacher" className="dashboard-button--ghost">
+                  Manage Plan
+                </Link>
+              </div>
             </div>
           </div>
         </article>
@@ -193,15 +218,20 @@ function DashboardHome() {
       <section className="dashboard-panel">
         <div className="dashboard-page__header">
           <div>
-            <p className="dashboard-section-kicker">Governance</p>
+            <p className="dashboard-section-kicker">Operations</p>
             <h2>Recent hub activity</h2>
-            <p>Owners and admins can see operational activity happening inside this hub.</p>
+            <p>Batch creation, bundle updates, and media operations appear here as your team ships.</p>
           </div>
-          {memberRole !== 'teacher' ? (
-            <Link to={`${hubDashboardBasePath}/admin`} className="dashboard-button--ghost">
-              Open Admin Panel
+          <div className="dashboard-page__actions">
+            <Link to={`${hubDashboardBasePath}/students`} className="dashboard-button--ghost">
+              View Students
             </Link>
-          ) : null}
+            {memberRole !== 'teacher' ? (
+              <Link to={`${hubDashboardBasePath}/admin`} className="dashboard-button--ghost">
+                Open Admin Panel
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         {memberRole === 'teacher' ? (
@@ -223,7 +253,7 @@ function DashboardHome() {
               >
                 <strong>{activity.action.replace(/_/g, ' ')}</strong>
                 <p className="dashboard-muted">
-                  {activity.userId?.displayName || 'A team member'} •{' '}
+                  {activity.userId?.displayName || 'A team member'} -{' '}
                   {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : 'Recently'}
                 </p>
               </article>

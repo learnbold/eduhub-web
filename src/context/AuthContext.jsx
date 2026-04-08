@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { normalizeSubscription } from '../utils/dashboardApi'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 const TOKEN_STORAGE_KEY = 'token'
 const USER_STORAGE_KEY = 'auth_user'
 const HUB_STORAGE_KEY = 'teacher_hub'
+const SUBSCRIPTION_STORAGE_KEY = 'teacher_subscription'
 
 const AuthContext = createContext(null)
 
@@ -104,7 +106,11 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_STORAGE_KEY) || '')
   const [user, setUser] = useState(() => parseStoredValue(USER_STORAGE_KEY))
   const [hub, setHub] = useState(() => parseStoredValue(HUB_STORAGE_KEY))
+  const [subscription, setSubscription] = useState(() =>
+    normalizeSubscription(parseStoredValue(SUBSCRIPTION_STORAGE_KEY))
+  )
   const [isHubLoading, setIsHubLoading] = useState(false)
+  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false)
 
   const persistHub = useCallback((nextHub) => {
     setHub(nextHub || null)
@@ -120,10 +126,23 @@ export function AuthProvider({ children }) {
     persistHub(nextHub)
   }, [persistHub])
 
+  const persistSubscription = useCallback((nextSubscription) => {
+    const normalizedSubscription = normalizeSubscription(nextSubscription)
+
+    setSubscription(normalizedSubscription)
+
+    if (normalizedSubscription) {
+      localStorage.setItem(SUBSCRIPTION_STORAGE_KEY, JSON.stringify(normalizedSubscription))
+    } else {
+      localStorage.removeItem(SUBSCRIPTION_STORAGE_KEY)
+    }
+  }, [])
+
   const persistAuth = useCallback((authPayload) => {
     const nextToken = authPayload?.token || ''
     const nextUser = authPayload?.user || null
     const hasHub = Object.prototype.hasOwnProperty.call(authPayload || {}, 'hub')
+    const hasSubscription = Object.prototype.hasOwnProperty.call(authPayload || {}, 'subscription')
 
     setToken(nextToken)
     setUser(nextUser)
@@ -145,7 +164,13 @@ export function AuthProvider({ children }) {
     } else {
       persistHub(null)
     }
-  }, [persistHub])
+
+    if (hasSubscription) {
+      persistSubscription(authPayload?.subscription || null)
+    } else {
+      persistSubscription(null)
+    }
+  }, [persistHub, persistSubscription])
 
   const login = useCallback(async ({ email, password }) => {
     const authPayload = await requestAuth('/auth/login', { email, password })
@@ -191,16 +216,48 @@ export function AuthProvider({ children }) {
     }
   }, [hub, persistHub, token, user?.role])
 
-  const becomeTeacher = useCallback(async () => {
+  const loadSubscription = useCallback(async ({ force = false, signal } = {}) => {
+    if (!token) {
+      throw new Error('Login required to manage a subscription.')
+    }
+
+    if (!force && subscription) {
+      return subscription
+    }
+
+    try {
+      setIsSubscriptionLoading(true)
+      const responseBody = await requestAuthorized('/subscriptions/me', token, { signal })
+      const nextSubscription = normalizeSubscription(responseBody?.subscription)
+
+      if (!nextSubscription) {
+        throw new Error('Invalid subscription response from server.')
+      }
+
+      persistSubscription(nextSubscription)
+      return nextSubscription
+    } finally {
+      setIsSubscriptionLoading(false)
+    }
+  }, [persistSubscription, subscription, token])
+
+  const upgradeTeacherPlan = useCallback(async ({ plan, billingCycle, couponCode, referralCode, lifetimeDeal } = {}) => {
     if (!token) {
       throw new Error('Login required to become a teacher.')
     }
 
-    const responseBody = await requestAuthorized('/auth/become-teacher', token, {
-      method: 'PATCH',
+    const responseBody = await requestAuthorized('/subscriptions/upgrade', token, {
+      method: 'POST',
+      body: {
+        plan,
+        billingCycle,
+        couponCode,
+        referralCode,
+        lifetimeDeal,
+      },
     })
 
-    if (!responseBody?.user || !responseBody?.hub) {
+    if (!responseBody?.user || !responseBody?.hub || !responseBody?.subscription) {
       throw new Error('Invalid teacher upgrade response from server.')
     }
 
@@ -208,13 +265,18 @@ export function AuthProvider({ children }) {
       token,
       user: responseBody.user,
       hub: responseBody.hub,
+      subscription: responseBody.subscription,
     })
 
     return responseBody
   }, [persistAuth, token])
 
+  const becomeTeacher = useCallback(async () => {
+    return upgradeTeacherPlan({ plan: 'free', billingCycle: 'monthly' })
+  }, [upgradeTeacherPlan])
+
   const logout = useCallback(() => {
-    persistAuth({ token: '', user: null, hub: null })
+    persistAuth({ token: '', user: null, hub: null, subscription: null })
   }, [persistAuth])
 
   useEffect(() => {
@@ -233,21 +295,52 @@ export function AuthProvider({ children }) {
     return () => controller.abort()
   }, [hub, loadTeacherHub, persistHub, token, user?.role])
 
+  useEffect(() => {
+    if (!token || subscription) {
+      return undefined
+    }
+
+    const controller = new AbortController()
+
+    loadSubscription({ signal: controller.signal }).catch(() => {})
+
+    return () => controller.abort()
+  }, [loadSubscription, subscription, token])
+
   const value = useMemo(
     () => ({
       user,
       token,
       hub,
+      subscription,
       isAuthenticated: Boolean(token),
       isHubLoading,
+      isSubscriptionLoading,
       login,
       register,
       loadTeacherHub,
+      loadSubscription,
+      upgradeTeacherPlan,
       becomeTeacher,
       updateStoredHub,
       logout,
     }),
-    [becomeTeacher, hub, isHubLoading, loadTeacherHub, login, logout, register, token, updateStoredHub, user]
+    [
+      becomeTeacher,
+      hub,
+      isHubLoading,
+      isSubscriptionLoading,
+      loadSubscription,
+      loadTeacherHub,
+      login,
+      logout,
+      register,
+      subscription,
+      token,
+      updateStoredHub,
+      upgradeTeacherPlan,
+      user,
+    ]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

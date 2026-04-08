@@ -6,8 +6,11 @@ import Course from './pages/Course'
 import Login from './pages/Login'
 import Player from './pages/Player'
 import Register from './pages/Register'
+import BecomeTeacher from './pages/BecomeTeacher'
 import CoursePlayer from './pages/course/CoursePlayer'
 import DashboardHome from './pages/dashboard/DashboardHome'
+import BatchesList from './pages/dashboard/BatchesList'
+import BatchDetail from './pages/dashboard/BatchDetail'
 import CoursesList from './pages/dashboard/CoursesList'
 import CreateCourse from './pages/dashboard/CreateCourse'
 import CourseDetail from './pages/dashboard/CourseDetail'
@@ -30,6 +33,7 @@ function App() {
       <Route path="/hub/:slug" element={<HubPublic />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/become-teacher" element={<BecomeTeacher />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/course/:slug/learn" element={<CoursePlayer />} />
         <Route path="/player/:courseId" element={<Player />} />
@@ -38,6 +42,8 @@ function App() {
         <Route path="/dashboard" element={<HubDashboardRedirect />} />
         <Route path="/hub/:slug/dashboard" element={<HubDashboardLayout />}>
           <Route index element={<DashboardHome />} />
+          <Route path="batches" element={<BatchesList />} />
+          <Route path="batches/:id" element={<BatchDetail />} />
           <Route path="courses" element={<CoursesList />} />
           <Route path="courses/create" element={<CreateCourse />} />
           <Route path="courses/:id" element={<CourseDetail />} />

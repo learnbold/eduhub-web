@@ -2,6 +2,9 @@ import { NavLink, useParams } from 'react-router-dom'
 
 function Sidebar({ hub, memberRole }) {
   const { slug = '' } = useParams()
+  const subscription = hub?.subscription
+  const batchLimit = subscription?.capabilities?.batchLimit
+  const activeBatchCount = subscription?.usage?.activeBatchCount || 0
 
   const navigationItems = [
     {
@@ -11,38 +14,38 @@ function Sidebar({ hub, memberRole }) {
       badge: '01',
     },
     {
+      label: 'Batches',
+      to: `/hub/${slug}/dashboard/batches`,
+      badge: '02',
+    },
+    {
       label: 'Courses',
       to: `/hub/${slug}/dashboard/courses`,
-      badge: '02',
+      badge: '03',
     },
     {
       label: 'Videos',
       to: `/hub/${slug}/dashboard/videos`,
-      badge: '03',
+      badge: '04',
     },
     {
       label: 'Students',
       to: `/hub/${slug}/dashboard/students`,
-      badge: '04',
+      badge: '05',
     },
     {
       label: 'Teachers',
       to: `/hub/${slug}/dashboard/teachers`,
-      badge: '05',
-    },
-    {
-      label: 'Admin Panel',
-      to: `/hub/${slug}/dashboard/admin`,
       badge: '06',
-    },
-    {
-      label: 'Settings',
-      to: `/hub/${slug}/dashboard/settings`,
-      badge: '07',
     },
     {
       label: 'Analytics',
       to: `/hub/${slug}/dashboard/analytics`,
+      badge: '07',
+    },
+    {
+      label: 'Settings',
+      to: `/hub/${slug}/dashboard/settings`,
       badge: '08',
     },
   ]
@@ -66,6 +69,16 @@ function Sidebar({ hub, memberRole }) {
         <strong>{memberRole || 'teacher'}</strong>
       </div>
 
+      <div className="dashboard-sidebar__role dashboard-sidebar__role--plan">
+        <span>Workspace plan</span>
+        <strong>{subscription?.capabilities?.label || 'Free'}</strong>
+        <p>
+          {batchLimit === null
+            ? `${activeBatchCount} active batches with no cap`
+            : `${activeBatchCount}/${batchLimit} active batches in use`}
+        </p>
+      </div>
+
       <nav className="dashboard-sidebar__nav" aria-label="Dashboard navigation">
         {navigationItems.map((item) => (
           <NavLink
@@ -84,9 +97,12 @@ function Sidebar({ hub, memberRole }) {
 
       <div className="dashboard-sidebar__footnote">
         <p>
-          This workspace is hub-first: branding, courses, videos, team operations, and future
-          governance all live here together.
+          This workspace is batch-first: hubs own the brand, while batches now package access to
+          courses, videos, students, and future notes.
         </p>
+        <NavLink to="/become-teacher" className="dashboard-link-button">
+          Manage Plan
+        </NavLink>
       </div>
     </aside>
   )

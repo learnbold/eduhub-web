@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 
 const buildErrorMessage = (payload, fallbackMessage) => {
   if (payload?.message) {
@@ -38,6 +38,64 @@ export const normalizeMember = (member) => {
   }
 }
 
+export const normalizeSubscription = (subscription) => {
+  if (!subscription) {
+    return null
+  }
+
+  const normalizedPlan = subscription.plan || 'free'
+  const effectivePlan = subscription.effectivePlan || normalizedPlan
+  const features = subscription.capabilities?.features || {}
+
+  return {
+    ...subscription,
+    id: subscription.id || subscription._id || '',
+    userId: subscription.userId || '',
+    plan: normalizedPlan,
+    effectivePlan,
+    status: subscription.status || 'active',
+    billingCycle: subscription.billingCycle || 'monthly',
+    startDate: subscription.startDate || null,
+    endDate: subscription.endDate || null,
+    trialEndsAt: subscription.trialEndsAt || null,
+    lifetimeDeal: Boolean(subscription.lifetimeDeal),
+    primaryBatchId: subscription.primaryBatchId || '',
+    archivedBatchIds: Array.isArray(subscription.archivedBatchIds)
+      ? subscription.archivedBatchIds
+      : [],
+    capabilities: {
+      label: subscription.capabilities?.label || effectivePlan,
+      batchLimit:
+        subscription.capabilities?.batchLimit === undefined
+          ? effectivePlan === 'premium'
+            ? null
+            : effectivePlan === 'pro'
+              ? 5
+              : 1
+          : subscription.capabilities.batchLimit,
+      features: {
+        customBranding: Boolean(features.customBranding),
+        customDomain: Boolean(features.customDomain),
+        bannerAds: Boolean(features.bannerAds),
+        teamMembers: Boolean(features.teamMembers),
+        analyticsBasic: Boolean(features.analyticsBasic),
+        analyticsAdvanced: Boolean(features.analyticsAdvanced),
+        prioritySupport: Boolean(features.prioritySupport),
+        futureFeatures: Boolean(features.futureFeatures),
+      },
+    },
+    usage: {
+      totalBatchCount: Number(subscription.usage?.totalBatchCount || 0),
+      activeBatchCount: Number(subscription.usage?.activeBatchCount || 0),
+      archivedBatchCount: Number(subscription.usage?.archivedBatchCount || 0),
+    },
+    notices: {
+      batchLimitReached: Boolean(subscription.notices?.batchLimitReached),
+      upgradeMessage: subscription.notices?.upgradeMessage || '',
+    },
+  }
+}
+
 export const normalizeHub = (hub) => {
   if (!hub) {
     return null
@@ -61,6 +119,8 @@ export const normalizeHub = (hub) => {
     admins: Array.isArray(hub.admins) ? hub.admins.map(normalizeMember).filter(Boolean) : [],
     primaryColor: hub.primaryColor || '#0f172a',
     secondaryColor: hub.secondaryColor || '#f59e0b',
+    customDomain: hub.customDomain || '',
+    subscription: normalizeSubscription(hub.subscription),
   }
 }
 
@@ -153,12 +213,72 @@ export const normalizeVideo = (video) => {
   }
 }
 
+export const normalizeBatch = (batch) => {
+  if (!batch) {
+    return null
+  }
+
+  return {
+    ...batch,
+    _id: batch._id || batch.id || '',
+    hubId:
+      typeof batch.hubId === 'string'
+        ? batch.hubId
+        : batch.hubId?._id || batch.hubId || '',
+    price: Number(batch.price || 0),
+    isPublished: batch.isPublished ?? true,
+    planVisibility: batch.planVisibility || 'active',
+    planArchivedAt: batch.planArchivedAt || null,
+    isPlanArchived: (batch.planVisibility || 'active') === 'archived_by_plan',
+    subscriptionType: batch.subscriptionType || 'one_time',
+    expiresAt: batch.expiresAt || null,
+    courses: Array.isArray(batch.courses) ? batch.courses.map(normalizeCourse).filter(Boolean) : [],
+    videos: Array.isArray(batch.videos) ? batch.videos.map(normalizeVideo).filter(Boolean) : [],
+    notes: Array.isArray(batch.notes) ? batch.notes : [],
+    students: Array.isArray(batch.students) ? batch.students.map(normalizeMember).filter(Boolean) : [],
+    enrollments: Array.isArray(batch.enrollments)
+      ? batch.enrollments.map((enrollment) => ({
+          ...enrollment,
+          userId:
+            enrollment?.userId && typeof enrollment.userId === 'object'
+              ? normalizeMember(enrollment.userId)
+              : enrollment?.userId || '',
+        }))
+      : [],
+    courseCount:
+      batch.courseCount !== undefined ? Number(batch.courseCount) : Array.isArray(batch.courses) ? batch.courses.length : 0,
+    videoCount:
+      batch.videoCount !== undefined ? Number(batch.videoCount) : Array.isArray(batch.videos) ? batch.videos.length : 0,
+    noteCount:
+      batch.noteCount !== undefined ? Number(batch.noteCount) : Array.isArray(batch.notes) ? batch.notes.length : 0,
+    studentCount:
+      batch.studentCount !== undefined
+        ? Number(batch.studentCount)
+        : Array.isArray(batch.students)
+          ? batch.students.length
+          : 0,
+    access: {
+      canManage: Boolean(batch.access?.canManage),
+      isEnrolled: Boolean(batch.access?.isEnrolled),
+      role: batch.access?.role || '',
+    },
+  }
+}
+
 export const formatPrice = (course) => {
   if (!course || course.isFree || Number(course.price || 0) === 0) {
     return 'Free'
   }
 
   return `INR ${Number(course.price).toLocaleString()}`
+}
+
+export const formatBatchPrice = (batch) => {
+  if (!batch || Number(batch.price || 0) === 0) {
+    return 'Free'
+  }
+
+  return `INR ${Number(batch.price).toLocaleString()}`
 }
 
 export const fileToDataUrl = (file) =>
@@ -250,6 +370,14 @@ export const fetchManagedHubCourses = (token, hubId, signal) =>
     (data) => (Array.isArray(data) ? data : []).map(normalizeCourse).filter(Boolean)
   )
 
+export const fetchManagedHubBatches = (token, hubId, signal) =>
+  request(`/batches/hub/${hubId}`, { token, signal }, 'Failed to load hub batches.').then((data) =>
+    (Array.isArray(data) ? data : []).map(normalizeBatch).filter(Boolean)
+  )
+
+export const fetchManagedBatchById = (token, batchId, signal) =>
+  request(`/batches/${batchId}`, { token, signal }, 'Failed to load batch details.').then(normalizeBatch)
+
 export const fetchManagedCourseById = (token, courseId, signal) =>
   request(`/courses/id/${courseId}/manage`, { token, signal }, 'Failed to load course details.').then(
     normalizeCourse
@@ -306,6 +434,52 @@ export const fetchHubActivity = (token, hubId, signal) =>
 export const createCourse = (token, payload) =>
   request('/courses', { method: 'POST', token, body: payload }, 'Failed to create course.').then(
     normalizeCourse
+  )
+
+export const createBatch = (token, payload) =>
+  request('/batches', { method: 'POST', token, body: payload }, 'Failed to create batch.').then(
+    normalizeBatch
+  )
+
+export const updateBatch = (token, batchId, payload) =>
+  request(`/batches/${batchId}`, { method: 'PATCH', token, body: payload }, 'Failed to update batch.').then(
+    normalizeBatch
+  )
+
+export const addCourseToBatch = (token, batchId, courseId) =>
+  request(
+    `/batches/${batchId}/courses`,
+    { method: 'POST', token, body: { courseId } },
+    'Failed to add course to batch.'
+  ).then(normalizeBatch)
+
+export const addVideoToBatch = (token, batchId, videoId) =>
+  request(
+    `/batches/${batchId}/videos`,
+    { method: 'POST', token, body: { videoId } },
+    'Failed to add video to batch.'
+  ).then(normalizeBatch)
+
+export const removeCourseFromBatch = (token, batchId, courseId) =>
+  request(
+    `/batches/${batchId}/courses/${courseId}`,
+    { method: 'DELETE', token },
+    'Failed to remove course from batch.'
+  ).then(normalizeBatch)
+
+export const removeVideoFromBatch = (token, batchId, videoId) =>
+  request(
+    `/batches/${batchId}/videos/${videoId}`,
+    { method: 'DELETE', token },
+    'Failed to remove video from batch.'
+  ).then(normalizeBatch)
+
+export const enrollInBatch = (token, batchId) =>
+  request(`/batches/${batchId}/enroll`, { method: 'POST', token }, 'Failed to enroll in batch.').then(
+    (response) => ({
+      ...response,
+      batch: normalizeBatch(response?.batch),
+    })
   )
 
 export const updateCourse = (token, courseId, payload) =>

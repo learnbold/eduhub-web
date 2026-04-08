@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { addHubAdmin, addHubTeacher, fetchHubTeam } from '../../utils/dashboardApi'
 
 function HubTeamManagement() {
   const { token } = useAuth()
   const { hub, memberRole } = useOutletContext()
+  const subscription = hub?.subscription
+  const canManageTeam = Boolean(subscription?.capabilities?.features?.teamMembers)
   const [team, setTeam] = useState({
     owner: null,
     admins: [],
@@ -168,61 +170,79 @@ function HubTeamManagement() {
         </section>
       ) : (
         <>
+          {!canManageTeam ? (
+            <section className="dashboard-panel">
+              <p className="dashboard-section-kicker">Premium Feature</p>
+              <h3>Team seats unlock on Premium</h3>
+              <p>
+                Upgrade to Premium to add teachers and admins to this hub. Existing members remain
+                visible below for continuity.
+              </p>
+              <div className="dashboard-inline-actions">
+                <Link to="/become-teacher" className="dashboard-button">
+                  Upgrade to Premium
+                </Link>
+              </div>
+            </section>
+          ) : null}
+
           <section className="dashboard-panel">
             <p className="dashboard-section-kicker">Owner</p>
             <h3>{team.owner?.displayName || 'Hub Owner'}</h3>
             <p className="dashboard-muted">{team.owner?.email || 'Owner account'}</p>
           </section>
 
-          <section className="dashboard-grid dashboard-grid--forms">
-            <section className="dashboard-form-card">
-              <p className="dashboard-section-kicker">Add Teacher</p>
-              <form className="dashboard-form" onSubmit={handleAddTeacher}>
-                <label className="dashboard-field">
-                  <span>Teacher Email</span>
-                  <input
-                    type="email"
-                    value={teacherEmail}
-                    onChange={(event) => setTeacherEmail(event.target.value)}
-                    placeholder="teacher@example.com"
-                    required
-                  />
-                </label>
-                <button type="submit" className="dashboard-button" disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving...' : 'Add Teacher'}
-                </button>
-              </form>
-            </section>
-
-            {memberRole === 'owner' ? (
+          {canManageTeam ? (
+            <section className="dashboard-grid dashboard-grid--forms">
               <section className="dashboard-form-card">
-                <p className="dashboard-section-kicker">Add Admin</p>
-                <form className="dashboard-form" onSubmit={handleAddAdmin}>
+                <p className="dashboard-section-kicker">Add Teacher</p>
+                <form className="dashboard-form" onSubmit={handleAddTeacher}>
                   <label className="dashboard-field">
-                    <span>Admin Email</span>
+                    <span>Teacher Email</span>
                     <input
                       type="email"
-                      value={adminEmail}
-                      onChange={(event) => setAdminEmail(event.target.value)}
-                      placeholder="admin@example.com"
+                      value={teacherEmail}
+                      onChange={(event) => setTeacherEmail(event.target.value)}
+                      placeholder="teacher@example.com"
                       required
                     />
                   </label>
                   <button type="submit" className="dashboard-button" disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving...' : 'Add Admin'}
+                    {isSubmitting ? 'Saving...' : 'Add Teacher'}
                   </button>
                 </form>
               </section>
-            ) : (
-              <section className="dashboard-form-card">
-                <p className="dashboard-section-kicker">Admin Roles</p>
-                <h3>Owner-only action</h3>
-                <p className="dashboard-muted">
-                  Only the hub owner can promote members into the admin role.
-                </p>
-              </section>
-            )}
-          </section>
+
+              {memberRole === 'owner' ? (
+                <section className="dashboard-form-card">
+                  <p className="dashboard-section-kicker">Add Admin</p>
+                  <form className="dashboard-form" onSubmit={handleAddAdmin}>
+                    <label className="dashboard-field">
+                      <span>Admin Email</span>
+                      <input
+                        type="email"
+                        value={adminEmail}
+                        onChange={(event) => setAdminEmail(event.target.value)}
+                        placeholder="admin@example.com"
+                        required
+                      />
+                    </label>
+                    <button type="submit" className="dashboard-button" disabled={isSubmitting}>
+                      {isSubmitting ? 'Saving...' : 'Add Admin'}
+                    </button>
+                  </form>
+                </section>
+              ) : (
+                <section className="dashboard-form-card">
+                  <p className="dashboard-section-kicker">Admin Roles</p>
+                  <h3>Owner-only action</h3>
+                  <p className="dashboard-muted">
+                    Only the hub owner can promote members into the admin role.
+                  </p>
+                </section>
+              )}
+            </section>
+          ) : null}
 
           {renderMemberCard('Admins', team.admins)}
           {renderMemberCard('Teachers', team.teachers)}

@@ -56,7 +56,7 @@ function HubVideos() {
             <h2>Manage all hub videos</h2>
             <p>
               Course lessons and standalone hub updates live together here so the content team can
-              manage the full video surface of the hub.
+              assign them into batches without losing the original course structure.
             </p>
           </div>
           <div className="dashboard-page__actions">
@@ -122,7 +122,20 @@ function HubVideos() {
                           {video.createdAt ? new Date(video.createdAt).toLocaleDateString() : 'Recently'}
                         </strong>
                       </div>
+                      <div>
+                        <span>Batches</span>
+                        <strong>{video.batchCount || 0}</strong>
+                      </div>
                     </div>
+                    {video.batchSummaries?.length ? (
+                      <div className="dashboard-pill-row">
+                        {video.batchSummaries.map((batch) => (
+                          <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
+                            {batch.title}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>
@@ -166,7 +179,20 @@ function HubVideos() {
                         <span>Lesson Order</span>
                         <strong>{video.order || 'Pending'}</strong>
                       </div>
+                      <div>
+                        <span>Batches</span>
+                        <strong>{video.batchCount || 0}</strong>
+                      </div>
                     </div>
+                    {video.batchSummaries?.length ? (
+                      <div className="dashboard-pill-row">
+                        {video.batchSummaries.map((batch) => (
+                          <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
+                            {batch.title}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>
