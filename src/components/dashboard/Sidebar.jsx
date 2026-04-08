@@ -11,39 +11,29 @@ function Sidebar({ hub, memberRole }) {
       badge: '01',
     },
     {
+      label: 'Batches',
+      to: `/hub/${slug}/dashboard/batches`,
+      badge: '02',
+    },
+    {
       label: 'Courses',
       to: `/hub/${slug}/dashboard/courses`,
-      badge: '02',
+      badge: '03',
     },
     {
       label: 'Videos',
       to: `/hub/${slug}/dashboard/videos`,
-      badge: '03',
+      badge: '04',
     },
     {
       label: 'Students',
       to: `/hub/${slug}/dashboard/students`,
-      badge: '04',
-    },
-    {
-      label: 'Teachers',
-      to: `/hub/${slug}/dashboard/teachers`,
       badge: '05',
-    },
-    {
-      label: 'Admin Panel',
-      to: `/hub/${slug}/dashboard/admin`,
-      badge: '06',
     },
     {
       label: 'Settings',
       to: `/hub/${slug}/dashboard/settings`,
-      badge: '07',
-    },
-    {
-      label: 'Analytics',
-      to: `/hub/${slug}/dashboard/analytics`,
-      badge: '08',
+      badge: '06',
     },
   ]
 
@@ -84,8 +74,8 @@ function Sidebar({ hub, memberRole }) {
 
       <div className="dashboard-sidebar__footnote">
         <p>
-          This workspace is hub-first: branding, courses, videos, team operations, and future
-          governance all live here together.
+          This workspace is batch-first: hubs own the brand, while batches now package access to
+          courses, videos, students, and future notes.
         </p>
       </div>
     </aside>

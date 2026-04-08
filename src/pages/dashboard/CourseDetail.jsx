@@ -319,6 +319,10 @@ function CourseDetail() {
                 <strong>{new Date(course.publishedAt).toLocaleDateString()}</strong>
               </div>
             ) : null}
+            <div>
+              <span>In Batches</span>
+              <strong>{course.batchCount || 0}</strong>
+            </div>
           </div>
 
           <div className="dashboard-inline-actions">
@@ -477,6 +481,40 @@ function CourseDetail() {
             <div className="dashboard-cover" />
           )}
         </article>
+      </section>
+
+      <section className="dashboard-panel">
+        <div className="dashboard-page__header">
+          <div>
+            <p className="dashboard-section-kicker">Batch Placement</p>
+            <h2>Where this course is sold</h2>
+            <p>Batch attachments decide how this course is monetized and unlocked for learners.</p>
+          </div>
+          <div className="dashboard-page__actions">
+            <Link to={`${basePath}/batches`} className="dashboard-button--ghost">
+              Manage Batches
+            </Link>
+          </div>
+        </div>
+
+        {course.batchSummaries?.length ? (
+          <div className="dashboard-pill-row">
+            {course.batchSummaries.map((batchSummary) => (
+              <Link
+                key={batchSummary._id}
+                to={`${basePath}/batches/${batchSummary._id}`}
+                className="dashboard-link-button"
+              >
+                {batchSummary.title}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="dashboard-empty">
+            <h3>Not attached to a batch yet</h3>
+            <p>This course still works on its own, but batches are now the primary access product.</p>
+          </div>
+        )}
       </section>
 
       <section className="dashboard-panel">

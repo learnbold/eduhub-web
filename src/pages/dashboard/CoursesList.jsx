@@ -50,11 +50,11 @@ function CoursesList() {
       <section className="dashboard-panel">
         <div className="dashboard-page__header">
           <div>
-            <p className="dashboard-section-kicker">Hub Courses</p>
-            <h2>Courses published and drafted in {hub.name}</h2>
+            <p className="dashboard-section-kicker">Reusable Courses</p>
+            <h2>Secondary course products inside {hub.name}</h2>
             <p>
-              Every course is attached to this hub, which keeps ownership, activity, and branding
-              aligned.
+              Courses still support modules and lessons, but they now act as reusable content blocks
+              that can be packaged into one or more batches.
             </p>
           </div>
 
@@ -121,7 +121,21 @@ function CoursesList() {
                     {course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Recently'}
                   </strong>
                 </div>
+                <div>
+                  <span>Batches</span>
+                  <strong>{course.batchCount || 0}</strong>
+                </div>
               </div>
+
+              {course.batchSummaries?.length ? (
+                <div className="dashboard-pill-row">
+                  {course.batchSummaries.map((batch) => (
+                    <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
+                      {batch.title}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="dashboard-inline-actions">
                 <Link to={`${basePath}/courses/${course._id}`} state={{ course }} className="dashboard-button">
@@ -132,7 +146,7 @@ function CoursesList() {
                   state={{ course }}
                   className="dashboard-button--ghost"
                 >
-                  Add Lesson
+                  Add Video
                 </Link>
               </div>
             </article>

@@ -153,12 +153,57 @@ export const normalizeVideo = (video) => {
   }
 }
 
+export const normalizeBatch = (batch) => {
+  if (!batch) {
+    return null
+  }
+
+  return {
+    ...batch,
+    _id: batch._id || batch.id || '',
+    hubId:
+      typeof batch.hubId === 'string'
+        ? batch.hubId
+        : batch.hubId?._id || batch.hubId || '',
+    price: Number(batch.price || 0),
+    courses: Array.isArray(batch.courses) ? batch.courses.map(normalizeCourse).filter(Boolean) : [],
+    videos: Array.isArray(batch.videos) ? batch.videos.map(normalizeVideo).filter(Boolean) : [],
+    notes: Array.isArray(batch.notes) ? batch.notes : [],
+    students: Array.isArray(batch.students) ? batch.students.map(normalizeMember).filter(Boolean) : [],
+    courseCount:
+      batch.courseCount !== undefined ? Number(batch.courseCount) : Array.isArray(batch.courses) ? batch.courses.length : 0,
+    videoCount:
+      batch.videoCount !== undefined ? Number(batch.videoCount) : Array.isArray(batch.videos) ? batch.videos.length : 0,
+    noteCount:
+      batch.noteCount !== undefined ? Number(batch.noteCount) : Array.isArray(batch.notes) ? batch.notes.length : 0,
+    studentCount:
+      batch.studentCount !== undefined
+        ? Number(batch.studentCount)
+        : Array.isArray(batch.students)
+          ? batch.students.length
+          : 0,
+    access: {
+      canManage: Boolean(batch.access?.canManage),
+      isEnrolled: Boolean(batch.access?.isEnrolled),
+      role: batch.access?.role || '',
+    },
+  }
+}
+
 export const formatPrice = (course) => {
   if (!course || course.isFree || Number(course.price || 0) === 0) {
     return 'Free'
   }
 
   return `INR ${Number(course.price).toLocaleString()}`
+}
+
+export const formatBatchPrice = (batch) => {
+  if (!batch || Number(batch.price || 0) === 0) {
+    return 'Free'
+  }
+
+  return `INR ${Number(batch.price).toLocaleString()}`
 }
 
 export const fileToDataUrl = (file) =>
@@ -250,6 +295,14 @@ export const fetchManagedHubCourses = (token, hubId, signal) =>
     (data) => (Array.isArray(data) ? data : []).map(normalizeCourse).filter(Boolean)
   )
 
+export const fetchManagedHubBatches = (token, hubId, signal) =>
+  request(`/batches/hub/${hubId}`, { token, signal }, 'Failed to load hub batches.').then((data) =>
+    (Array.isArray(data) ? data : []).map(normalizeBatch).filter(Boolean)
+  )
+
+export const fetchManagedBatchById = (token, batchId, signal) =>
+  request(`/batches/${batchId}`, { token, signal }, 'Failed to load batch details.').then(normalizeBatch)
+
 export const fetchManagedCourseById = (token, courseId, signal) =>
   request(`/courses/id/${courseId}/manage`, { token, signal }, 'Failed to load course details.').then(
     normalizeCourse
@@ -306,6 +359,38 @@ export const fetchHubActivity = (token, hubId, signal) =>
 export const createCourse = (token, payload) =>
   request('/courses', { method: 'POST', token, body: payload }, 'Failed to create course.').then(
     normalizeCourse
+  )
+
+export const createBatch = (token, payload) =>
+  request('/batches', { method: 'POST', token, body: payload }, 'Failed to create batch.').then(
+    normalizeBatch
+  )
+
+export const updateBatch = (token, batchId, payload) =>
+  request(`/batches/${batchId}`, { method: 'PATCH', token, body: payload }, 'Failed to update batch.').then(
+    normalizeBatch
+  )
+
+export const addCourseToBatch = (token, batchId, courseId) =>
+  request(
+    `/batches/${batchId}/add-course`,
+    { method: 'POST', token, body: { courseId } },
+    'Failed to add course to batch.'
+  ).then(normalizeBatch)
+
+export const addVideoToBatch = (token, batchId, videoId) =>
+  request(
+    `/batches/${batchId}/add-video`,
+    { method: 'POST', token, body: { videoId } },
+    'Failed to add video to batch.'
+  ).then(normalizeBatch)
+
+export const enrollInBatch = (token, batchId) =>
+  request(`/batches/${batchId}/enroll`, { method: 'POST', token }, 'Failed to enroll in batch.').then(
+    (response) => ({
+      ...response,
+      batch: normalizeBatch(response?.batch),
+    })
   )
 
 export const updateCourse = (token, courseId, payload) =>

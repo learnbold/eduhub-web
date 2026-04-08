@@ -8,6 +8,8 @@ import Player from './pages/Player'
 import Register from './pages/Register'
 import CoursePlayer from './pages/course/CoursePlayer'
 import DashboardHome from './pages/dashboard/DashboardHome'
+import BatchesList from './pages/dashboard/BatchesList'
+import BatchDetail from './pages/dashboard/BatchDetail'
 import CoursesList from './pages/dashboard/CoursesList'
 import CreateCourse from './pages/dashboard/CreateCourse'
 import CourseDetail from './pages/dashboard/CourseDetail'
@@ -38,6 +40,8 @@ function App() {
         <Route path="/dashboard" element={<HubDashboardRedirect />} />
         <Route path="/hub/:slug/dashboard" element={<HubDashboardLayout />}>
           <Route index element={<DashboardHome />} />
+          <Route path="batches" element={<BatchesList />} />
+          <Route path="batches/:id" element={<BatchDetail />} />
           <Route path="courses" element={<CoursesList />} />
           <Route path="courses/create" element={<CreateCourse />} />
           <Route path="courses/:id" element={<CourseDetail />} />
