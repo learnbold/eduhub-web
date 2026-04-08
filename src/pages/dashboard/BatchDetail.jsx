@@ -8,6 +8,8 @@ import {
   fetchManagedHubCourses,
   fetchManagedHubVideos,
   formatBatchPrice,
+  removeCourseFromBatch,
+  removeVideoFromBatch,
   updateBatch,
 } from '../../utils/dashboardApi'
 
@@ -162,6 +164,10 @@ function BatchDetail() {
               <strong>{formatBatchPrice(batch)}</strong>
             </div>
             <div>
+              <span>Status</span>
+              <strong>{batch.isPublished ? 'Published' : 'Draft'}</strong>
+            </div>
+            <div>
               <span>Courses</span>
               <strong>{batch.courseCount}</strong>
             </div>
@@ -172,6 +178,10 @@ function BatchDetail() {
             <div>
               <span>Students</span>
               <strong>{batch.studentCount}</strong>
+            </div>
+            <div>
+              <span>Plan</span>
+              <strong>{batch.subscriptionType || 'one_time'}</strong>
             </div>
             <div>
               <span>Start</span>
@@ -389,6 +399,24 @@ function BatchDetail() {
                     <Link to={`${basePath}/courses/${course._id}`} className="dashboard-link-button">
                       Open Course
                     </Link>
+                    <button
+                      type="button"
+                      className="dashboard-button--ghost"
+                      onClick={async () => {
+                        try {
+                          setError('')
+                          setSuccess('')
+                          await removeCourseFromBatch(token, batch._id, course._id)
+                          const nextBatch = await fetchManagedBatchById(token, batch._id)
+                          setBatch(nextBatch)
+                          setSuccess('Course removed from batch.')
+                        } catch (removeError) {
+                          setError(removeError.message || 'Failed to remove course from batch.')
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </article>
               ))}
@@ -478,6 +506,26 @@ function BatchDetail() {
                       <strong>{video.order || 'N/A'}</strong>
                     </div>
                   </div>
+                  <div className="dashboard-inline-actions">
+                    <button
+                      type="button"
+                      className="dashboard-button--ghost"
+                      onClick={async () => {
+                        try {
+                          setError('')
+                          setSuccess('')
+                          await removeVideoFromBatch(token, batch._id, video._id)
+                          const nextBatch = await fetchManagedBatchById(token, batch._id)
+                          setBatch(nextBatch)
+                          setSuccess('Video removed from batch.')
+                        } catch (removeError) {
+                          setError(removeError.message || 'Failed to remove video from batch.')
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -491,7 +539,7 @@ function BatchDetail() {
             <div>
               <p className="dashboard-section-kicker">Batch Students</p>
               <h3>Students enrolled into this access bundle</h3>
-              <p>Anyone enrolled here unlocks the batch’s courses, videos, and future notes together.</p>
+              <p>Anyone enrolled here unlocks the batch's courses, videos, and future notes together.</p>
             </div>
           </div>
 
@@ -506,6 +554,10 @@ function BatchDetail() {
                 <article key={student._id} className="dashboard-member-card">
                   <strong>{student.displayName}</strong>
                   <p className="dashboard-muted">{student.email || 'No email available'}</p>
+                  <p className="dashboard-muted">
+                    {student.enrollmentStatus || 'active'}
+                    {student.joinedAt ? ` • Joined ${new Date(student.joinedAt).toLocaleDateString()}` : ''}
+                  </p>
                 </article>
               ))}
             </div>

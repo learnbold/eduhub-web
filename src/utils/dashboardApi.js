@@ -166,10 +166,22 @@ export const normalizeBatch = (batch) => {
         ? batch.hubId
         : batch.hubId?._id || batch.hubId || '',
     price: Number(batch.price || 0),
+    isPublished: batch.isPublished ?? true,
+    subscriptionType: batch.subscriptionType || 'one_time',
+    expiresAt: batch.expiresAt || null,
     courses: Array.isArray(batch.courses) ? batch.courses.map(normalizeCourse).filter(Boolean) : [],
     videos: Array.isArray(batch.videos) ? batch.videos.map(normalizeVideo).filter(Boolean) : [],
     notes: Array.isArray(batch.notes) ? batch.notes : [],
     students: Array.isArray(batch.students) ? batch.students.map(normalizeMember).filter(Boolean) : [],
+    enrollments: Array.isArray(batch.enrollments)
+      ? batch.enrollments.map((enrollment) => ({
+          ...enrollment,
+          userId:
+            enrollment?.userId && typeof enrollment.userId === 'object'
+              ? normalizeMember(enrollment.userId)
+              : enrollment?.userId || '',
+        }))
+      : [],
     courseCount:
       batch.courseCount !== undefined ? Number(batch.courseCount) : Array.isArray(batch.courses) ? batch.courses.length : 0,
     videoCount:
@@ -373,16 +385,30 @@ export const updateBatch = (token, batchId, payload) =>
 
 export const addCourseToBatch = (token, batchId, courseId) =>
   request(
-    `/batches/${batchId}/add-course`,
+    `/batches/${batchId}/courses`,
     { method: 'POST', token, body: { courseId } },
     'Failed to add course to batch.'
   ).then(normalizeBatch)
 
 export const addVideoToBatch = (token, batchId, videoId) =>
   request(
-    `/batches/${batchId}/add-video`,
+    `/batches/${batchId}/videos`,
     { method: 'POST', token, body: { videoId } },
     'Failed to add video to batch.'
+  ).then(normalizeBatch)
+
+export const removeCourseFromBatch = (token, batchId, courseId) =>
+  request(
+    `/batches/${batchId}/courses/${courseId}`,
+    { method: 'DELETE', token },
+    'Failed to remove course from batch.'
+  ).then(normalizeBatch)
+
+export const removeVideoFromBatch = (token, batchId, videoId) =>
+  request(
+    `/batches/${batchId}/videos/${videoId}`,
+    { method: 'DELETE', token },
+    'Failed to remove video from batch.'
   ).then(normalizeBatch)
 
 export const enrollInBatch = (token, batchId) =>

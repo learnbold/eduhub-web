@@ -1,14 +1,63 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { fetchManagedHubCourses, formatPrice } from '../../utils/dashboardApi'
+import {
+  addCourseToBatch,
+  fetchManagedHubBatches,
+  fetchManagedHubCourses,
+  formatPrice,
+} from '../../utils/dashboardApi'
 
 function CoursesList() {
   const { token } = useAuth()
   const { hub } = useOutletContext()
   const [courses, setCourses] = useState([])
+  const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [addingCourseId, setAddingCourseId] = useState('')
+  const [batchSelections, setBatchSelections] = useState({})
+
+  const loadCoursesWorkspace = useCallback(
+    async (signal) => {
+      if (!hub?._id) {
+        setCourses([])
+        setBatches([])
+        return
+      }
+
+      const [nextCourses, nextBatches] = await Promise.all([
+        fetchManagedHubCourses(token, hub._id, signal),
+        fetchManagedHubBatches(token, hub._id, signal),
+      ])
+
+      if (signal?.aborted) {
+        return
+      }
+
+      setCourses(nextCourses)
+      setBatches(nextBatches)
+      setBatchSelections((current) => {
+        const nextSelections = { ...current }
+
+        for (const course of nextCourses) {
+          if (nextSelections[course._id]) {
+            continue
+          }
+
+          const availableBatches = nextBatches.filter(
+            (batch) => !(course.batchSummaries || []).some((summary) => summary._id === batch._id)
+          )
+
+          nextSelections[course._id] = availableBatches[0]?._id || ''
+        }
+
+        return nextSelections
+      })
+    },
+    [hub?._id, token]
+  )
 
   useEffect(() => {
     if (!hub?._id) {
@@ -21,15 +70,12 @@ function CoursesList() {
       try {
         setLoading(true)
         setError('')
-        const nextCourses = await fetchManagedHubCourses(token, hub._id, controller.signal)
-
-        if (!controller.signal.aborted) {
-          setCourses(nextCourses)
-        }
+        await loadCoursesWorkspace(controller.signal)
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(loadError.message || 'Failed to load your hub courses.')
           setCourses([])
+          setBatches([])
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -41,9 +87,19 @@ function CoursesList() {
     loadCourses()
 
     return () => controller.abort()
-  }, [hub?._id, token])
+  }, [hub?._id, loadCoursesWorkspace])
 
   const basePath = `/hub/${hub.slug}/dashboard`
+  const batchOptionsByCourse = useMemo(
+    () =>
+      Object.fromEntries(
+        courses.map((course) => [
+          course._id,
+          batches.filter((batch) => !(course.batchSummaries || []).some((summary) => summary._id === batch._id)),
+        ])
+      ),
+    [batches, courses]
+  )
 
   return (
     <div className="dashboard-page">
@@ -62,11 +118,15 @@ function CoursesList() {
             <Link to={`${basePath}/courses/create`} className="dashboard-button">
               Create Course
             </Link>
+            <Link to={`${basePath}/batches`} className="dashboard-button--ghost">
+              Manage Batches
+            </Link>
           </div>
         </div>
       </section>
 
       {error ? <p className="dashboard-alert">{error}</p> : null}
+      {success ? <p className="dashboard-success">{success}</p> : null}
 
       {loading ? (
         <section className="dashboard-panel">
@@ -84,73 +144,129 @@ function CoursesList() {
         </section>
       ) : (
         <section className="dashboard-grid dashboard-grid--courses">
-          {courses.map((course) => (
-            <article key={course._id} className="dashboard-course-card">
-              <div className="dashboard-course-card__header">
-                <div>
-                  <h3>{course.title}</h3>
-                  <p className="dashboard-muted">{course.description || 'No description yet.'}</p>
-                </div>
+          {courses.map((course) => {
+            const availableBatches = batchOptionsByCourse[course._id] || []
+            const selectedBatchId = batchSelections[course._id] || ''
 
-                <div className="dashboard-pill-row">
-                  <span className="dashboard-pill dashboard-pill--neutral">{course.category}</span>
-                  <span
-                    className={
-                      course.isPublished
-                        ? 'dashboard-pill dashboard-pill--success'
-                        : 'dashboard-pill dashboard-pill--warning'
-                    }
-                  >
-                    {course.isPublished ? 'Published' : 'Draft'}
-                  </span>
-                </div>
-              </div>
+            return (
+              <article key={course._id} className="dashboard-course-card">
+                <div className="dashboard-course-card__header">
+                  <div>
+                    <h3>{course.title}</h3>
+                    <p className="dashboard-muted">{course.description || 'No description yet.'}</p>
+                  </div>
 
-              <div className="dashboard-course-card__meta">
-                <div>
-                  <span>Price</span>
-                  <strong>{formatPrice(course)}</strong>
-                </div>
-                <div>
-                  <span>Level</span>
-                  <strong>{course.level}</strong>
-                </div>
-                <div>
-                  <span>Created</span>
-                  <strong>
-                    {course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Recently'}
-                  </strong>
-                </div>
-                <div>
-                  <span>Batches</span>
-                  <strong>{course.batchCount || 0}</strong>
-                </div>
-              </div>
-
-              {course.batchSummaries?.length ? (
-                <div className="dashboard-pill-row">
-                  {course.batchSummaries.map((batch) => (
-                    <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
-                      {batch.title}
+                  <div className="dashboard-pill-row">
+                    <span className="dashboard-pill dashboard-pill--neutral">{course.category}</span>
+                    <span
+                      className={
+                        course.isPublished
+                          ? 'dashboard-pill dashboard-pill--success'
+                          : 'dashboard-pill dashboard-pill--warning'
+                      }
+                    >
+                      {course.isPublished ? 'Published' : 'Draft'}
                     </span>
-                  ))}
+                  </div>
                 </div>
-              ) : null}
 
-              <div className="dashboard-inline-actions">
-                <Link to={`${basePath}/courses/${course._id}`} state={{ course }} className="dashboard-button">
-                  Open Course
-                </Link>
-                <Link
-                  to={`${basePath}/videos/upload?courseId=${course._id}&type=course`}
-                  state={{ course }}
-                  className="dashboard-button--ghost"
-                >
-                  Add Video
-                </Link>
-              </div>
-            </article>
-          ))}
+                <div className="dashboard-course-card__meta">
+                  <div>
+                    <span>Price</span>
+                    <strong>{formatPrice(course)}</strong>
+                  </div>
+                  <div>
+                    <span>Level</span>
+                    <strong>{course.level}</strong>
+                  </div>
+                  <div>
+                    <span>Created</span>
+                    <strong>
+                      {course.createdAt ? new Date(course.createdAt).toLocaleDateString() : 'Recently'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Used in</span>
+                    <strong>{course.batchCount || 0} batches</strong>
+                  </div>
+                </div>
+
+                {course.batchSummaries?.length ? (
+                  <div className="dashboard-pill-row">
+                    {course.batchSummaries.map((batch) => (
+                      <Link
+                        key={batch._id}
+                        to={`${basePath}/batches/${batch._id}`}
+                        className="dashboard-pill dashboard-pill--neutral"
+                      >
+                        {batch.title}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="dashboard-inline-actions">
+                  <Link to={`${basePath}/courses/${course._id}`} state={{ course }} className="dashboard-button">
+                    Open Course
+                  </Link>
+                  <Link
+                    to={`${basePath}/videos/upload?courseId=${course._id}&type=course`}
+                    state={{ course }}
+                    className="dashboard-button--ghost"
+                  >
+                    Add Video
+                  </Link>
+                </div>
+
+                <div className="dashboard-selector-row">
+                  <select
+                    value={selectedBatchId}
+                    onChange={(event) =>
+                      setBatchSelections((current) => ({
+                        ...current,
+                        [course._id]: event.target.value,
+                      }))
+                    }
+                    disabled={availableBatches.length === 0}
+                  >
+                    <option value="">
+                      {availableBatches.length === 0 ? 'Already in all batches' : 'Choose a batch'}
+                    </option>
+                    {availableBatches.map((batch) => (
+                      <option key={batch._id} value={batch._id}>
+                        {batch.title}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="dashboard-button"
+                    disabled={!selectedBatchId || addingCourseId === course._id}
+                    onClick={async () => {
+                      if (!selectedBatchId) {
+                        return
+                      }
+
+                      try {
+                        setAddingCourseId(course._id)
+                        setError('')
+                        setSuccess('')
+                        await addCourseToBatch(token, selectedBatchId, course._id)
+                        await loadCoursesWorkspace()
+                        setSuccess(`"${course.title}" was added to the selected batch.`)
+                      } catch (addError) {
+                        setError(addError.message || 'Failed to add course to batch.')
+                      } finally {
+                        setAddingCourseId('')
+                      }
+                    }}
+                  >
+                    {addingCourseId === course._id ? 'Adding...' : 'Add to Batch'}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </section>
       )}
     </div>
