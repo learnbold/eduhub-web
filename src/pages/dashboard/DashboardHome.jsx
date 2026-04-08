@@ -12,6 +12,7 @@ import {
 function DashboardHome() {
   const { token } = useAuth()
   const { hub, memberRole } = useOutletContext()
+  const subscription = hub?.subscription
   const [stats, setStats] = useState({
     batches: 0,
     courses: 0,
@@ -148,11 +149,11 @@ function DashboardHome() {
 
       <section className="dashboard-hero">
         <article className="dashboard-panel">
-            <p className="dashboard-section-kicker">Identity</p>
-            <h2>{hub.name}</h2>
-            <p className="dashboard-muted">
-              {hub.description || `${ownerName}'s branded batch-first teaching hub on Sparklass.`}
-            </p>
+          <p className="dashboard-section-kicker">Identity</p>
+          <h2>{hub.name}</h2>
+          <p className="dashboard-muted">
+            {hub.description || `${ownerName}'s branded batch-first teaching hub on Sparklass.`}
+          </p>
 
           <div className="dashboard-detail-grid">
             <div>
@@ -170,6 +171,18 @@ function DashboardHome() {
             <div>
               <span>Public URL</span>
               <strong>{`/hub/${hub.slug}`}</strong>
+            </div>
+            <div>
+              <span>Plan</span>
+              <strong>{subscription?.capabilities?.label || 'Free'}</strong>
+            </div>
+            <div>
+              <span>Batch Capacity</span>
+              <strong>
+                {subscription?.capabilities?.batchLimit === null
+                  ? 'Unlimited'
+                  : `${subscription?.usage?.activeBatchCount || 0}/${subscription?.capabilities?.batchLimit || 1}`}
+              </strong>
             </div>
           </div>
         </article>
@@ -191,6 +204,11 @@ function DashboardHome() {
                   className="dashboard-color-chip"
                   style={{ backgroundColor: hub.secondaryColor }}
                 />
+              </div>
+              <div className="dashboard-inline-actions" style={{ marginTop: 16 }}>
+                <Link to="/become-teacher" className="dashboard-button--ghost">
+                  Manage Plan
+                </Link>
               </div>
             </div>
           </div>
@@ -235,7 +253,7 @@ function DashboardHome() {
               >
                 <strong>{activity.action.replace(/_/g, ' ')}</strong>
                 <p className="dashboard-muted">
-                  {activity.userId?.displayName || 'A team member'} •{' '}
+                  {activity.userId?.displayName || 'A team member'} -{' '}
                   {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : 'Recently'}
                 </p>
               </article>

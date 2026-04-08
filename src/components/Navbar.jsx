@@ -8,45 +8,17 @@ const CATEGORIES = ['Development', 'Design', 'Business', 'Marketing', 'Data Scie
 function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { becomeTeacher, hub, isAuthenticated, isHubLoading, logout, user } = useAuth()
-  const [isUpgrading, setIsUpgrading] = useState(false)
+  const { hub, isAuthenticated, isHubLoading, logout, user } = useAuth()
   const [isExploreOpen, setIsExploreOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  
-  const [feedback, setFeedback] = useState({
-    type: '',
-    message: '',
-  })
   
   const displayName = user?.preferredName || user?.firstName || user?.name || user?.username
   const isTeacher = user?.role === 'teacher'
   const hubDashboardPath = hub?.slug ? `/hub/${hub.slug}/dashboard` : ''
 
   const handleLogout = () => {
-    setFeedback({ type: '', message: '' })
     logout()
     navigate('/')
-  }
-
-  const handleBecomeTeacher = async () => {
-    if (isUpgrading) return
-    setFeedback({ type: '', message: '' })
-
-    try {
-      setIsUpgrading(true)
-      const response = await becomeTeacher()
-      const nextHubSlug = response?.hub?.slug
-
-      setFeedback({ type: 'success', message: response.message || 'You are now a teacher.' })
-
-      if (nextHubSlug) {
-        setTimeout(() => navigate(`/hub/${nextHubSlug}/dashboard`), 450)
-      }
-    } catch (error) {
-      setFeedback({ type: 'error', message: error.message || 'Failed to become a teacher.' })
-    } finally {
-      setIsUpgrading(false)
-    }
   }
 
   return (
@@ -127,9 +99,13 @@ function Navbar() {
                     </button>
                   )
                 ) : (
-                  <button type="button" className="navbar__cta" onClick={handleBecomeTeacher} disabled={isUpgrading}>
-                    {isUpgrading ? 'Upgrading...' : 'Become a Teacher'}
-                  </button>
+                  <Link
+                    to="/become-teacher"
+                    className="navbar__cta"
+                    state={{ from: location }}
+                  >
+                    Become a Teacher
+                  </Link>
                 )}
                 <button type="button" className="navbar__logout" onClick={handleLogout}>Logout</button>
               </>
@@ -139,12 +115,6 @@ function Navbar() {
           </div>
         </div>
       </div>
-
-      {feedback.message && (
-        <div className={`navbar__feedback ${feedback.type === 'error' ? 'navbar__feedback--error' : ''}`} role="status" aria-live="polite">
-          {feedback.message}
-        </div>
-      )}
     </header>
   )
 }

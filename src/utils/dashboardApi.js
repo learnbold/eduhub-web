@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 
 const buildErrorMessage = (payload, fallbackMessage) => {
   if (payload?.message) {
@@ -38,6 +38,64 @@ export const normalizeMember = (member) => {
   }
 }
 
+export const normalizeSubscription = (subscription) => {
+  if (!subscription) {
+    return null
+  }
+
+  const normalizedPlan = subscription.plan || 'free'
+  const effectivePlan = subscription.effectivePlan || normalizedPlan
+  const features = subscription.capabilities?.features || {}
+
+  return {
+    ...subscription,
+    id: subscription.id || subscription._id || '',
+    userId: subscription.userId || '',
+    plan: normalizedPlan,
+    effectivePlan,
+    status: subscription.status || 'active',
+    billingCycle: subscription.billingCycle || 'monthly',
+    startDate: subscription.startDate || null,
+    endDate: subscription.endDate || null,
+    trialEndsAt: subscription.trialEndsAt || null,
+    lifetimeDeal: Boolean(subscription.lifetimeDeal),
+    primaryBatchId: subscription.primaryBatchId || '',
+    archivedBatchIds: Array.isArray(subscription.archivedBatchIds)
+      ? subscription.archivedBatchIds
+      : [],
+    capabilities: {
+      label: subscription.capabilities?.label || effectivePlan,
+      batchLimit:
+        subscription.capabilities?.batchLimit === undefined
+          ? effectivePlan === 'premium'
+            ? null
+            : effectivePlan === 'pro'
+              ? 5
+              : 1
+          : subscription.capabilities.batchLimit,
+      features: {
+        customBranding: Boolean(features.customBranding),
+        customDomain: Boolean(features.customDomain),
+        bannerAds: Boolean(features.bannerAds),
+        teamMembers: Boolean(features.teamMembers),
+        analyticsBasic: Boolean(features.analyticsBasic),
+        analyticsAdvanced: Boolean(features.analyticsAdvanced),
+        prioritySupport: Boolean(features.prioritySupport),
+        futureFeatures: Boolean(features.futureFeatures),
+      },
+    },
+    usage: {
+      totalBatchCount: Number(subscription.usage?.totalBatchCount || 0),
+      activeBatchCount: Number(subscription.usage?.activeBatchCount || 0),
+      archivedBatchCount: Number(subscription.usage?.archivedBatchCount || 0),
+    },
+    notices: {
+      batchLimitReached: Boolean(subscription.notices?.batchLimitReached),
+      upgradeMessage: subscription.notices?.upgradeMessage || '',
+    },
+  }
+}
+
 export const normalizeHub = (hub) => {
   if (!hub) {
     return null
@@ -61,6 +119,8 @@ export const normalizeHub = (hub) => {
     admins: Array.isArray(hub.admins) ? hub.admins.map(normalizeMember).filter(Boolean) : [],
     primaryColor: hub.primaryColor || '#0f172a',
     secondaryColor: hub.secondaryColor || '#f59e0b',
+    customDomain: hub.customDomain || '',
+    subscription: normalizeSubscription(hub.subscription),
   }
 }
 
@@ -167,6 +227,9 @@ export const normalizeBatch = (batch) => {
         : batch.hubId?._id || batch.hubId || '',
     price: Number(batch.price || 0),
     isPublished: batch.isPublished ?? true,
+    planVisibility: batch.planVisibility || 'active',
+    planArchivedAt: batch.planArchivedAt || null,
+    isPlanArchived: (batch.planVisibility || 'active') === 'archived_by_plan',
     subscriptionType: batch.subscriptionType || 'one_time',
     expiresAt: batch.expiresAt || null,
     courses: Array.isArray(batch.courses) ? batch.courses.map(normalizeCourse).filter(Boolean) : [],

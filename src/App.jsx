@@ -6,6 +6,7 @@ import Course from './pages/Course'
 import Login from './pages/Login'
 import Player from './pages/Player'
 import Register from './pages/Register'
+import BecomeTeacher from './pages/BecomeTeacher'
 import CoursePlayer from './pages/course/CoursePlayer'
 import DashboardHome from './pages/dashboard/DashboardHome'
 import BatchesList from './pages/dashboard/BatchesList'
@@ -32,6 +33,7 @@ function App() {
       <Route path="/hub/:slug" element={<HubPublic />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/become-teacher" element={<BecomeTeacher />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/course/:slug/learn" element={<CoursePlayer />} />
         <Route path="/player/:courseId" element={<Player />} />

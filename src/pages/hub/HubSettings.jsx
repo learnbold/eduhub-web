@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { updateHubSettings } from '../../utils/dashboardApi'
 
@@ -15,6 +15,7 @@ function HubSettings() {
     banner: '',
     primaryColor: '#0f172a',
     secondaryColor: '#f59e0b',
+    customDomain: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -33,8 +34,13 @@ function HubSettings() {
       banner: hub.banner || '',
       primaryColor: hub.primaryColor || '#0f172a',
       secondaryColor: hub.secondaryColor || '#f59e0b',
+      customDomain: hub.customDomain || '',
     })
   }, [hub])
+
+  const subscription = hub?.subscription
+  const canUseCustomBranding = Boolean(subscription?.capabilities?.features?.customBranding)
+  const canUseCustomDomain = Boolean(subscription?.capabilities?.features?.customDomain)
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -53,7 +59,22 @@ function HubSettings() {
       setError('')
       setSuccess('')
 
-      const response = await updateHubSettings(token, hub._id, formValues)
+      const payload = {
+        name: formValues.name,
+        slug: formValues.slug,
+        description: formValues.description,
+        ...(canUseCustomBranding
+          ? {
+              logo: formValues.logo,
+              banner: formValues.banner,
+              primaryColor: formValues.primaryColor,
+              secondaryColor: formValues.secondaryColor,
+            }
+          : {}),
+        ...(canUseCustomDomain ? { customDomain: formValues.customDomain } : {}),
+      }
+
+      const response = await updateHubSettings(token, hub._id, payload)
       const nextHub = response.hub
 
       updateCurrentHub(nextHub)
@@ -96,6 +117,15 @@ function HubSettings() {
       {error ? <p className="dashboard-alert">{error}</p> : null}
       {success ? <p className="dashboard-success">{success}</p> : null}
 
+      {!canUseCustomBranding ? (
+        <div className="dashboard-info">
+          Upgrade to Pro to unlock custom branding, banner ads, and a more premium public hub.
+          <Link to="/become-teacher" className="dashboard-link-button">
+            Upgrade
+          </Link>
+        </div>
+      ) : null}
+
       <section className="dashboard-form-card">
         <form className="dashboard-form" onSubmit={handleSubmit}>
           <div className="dashboard-form__grid">
@@ -123,19 +153,37 @@ function HubSettings() {
           <div className="dashboard-form__grid">
             <label className="dashboard-field">
               <span>Logo URL</span>
-              <input type="url" name="logo" value={formValues.logo} onChange={handleChange} />
+              <input
+                type="url"
+                name="logo"
+                value={formValues.logo}
+                onChange={handleChange}
+                disabled={!canUseCustomBranding}
+              />
             </label>
 
             <label className="dashboard-field">
               <span>Banner URL</span>
-              <input type="url" name="banner" value={formValues.banner} onChange={handleChange} />
+              <input
+                type="url"
+                name="banner"
+                value={formValues.banner}
+                onChange={handleChange}
+                disabled={!canUseCustomBranding}
+              />
             </label>
           </div>
 
           <div className="dashboard-form__grid">
             <label className="dashboard-field">
               <span>Primary Color</span>
-              <input type="text" name="primaryColor" value={formValues.primaryColor} onChange={handleChange} />
+              <input
+                type="text"
+                name="primaryColor"
+                value={formValues.primaryColor}
+                onChange={handleChange}
+                disabled={!canUseCustomBranding}
+              />
             </label>
 
             <label className="dashboard-field">
@@ -145,9 +193,22 @@ function HubSettings() {
                 name="secondaryColor"
                 value={formValues.secondaryColor}
                 onChange={handleChange}
+                disabled={!canUseCustomBranding}
               />
             </label>
           </div>
+
+          <label className="dashboard-field">
+            <span>Custom Domain</span>
+            <input
+              type="text"
+              name="customDomain"
+              value={formValues.customDomain}
+              onChange={handleChange}
+              placeholder="learn.yourbrand.com"
+              disabled={!canUseCustomDomain}
+            />
+          </label>
 
           <div className="dashboard-brand-preview dashboard-brand-preview--settings">
             {formValues.logo ? (

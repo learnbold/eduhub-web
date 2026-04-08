@@ -61,6 +61,15 @@ function BatchesList() {
   }, [hub?._id, token])
 
   const basePath = `/hub/${hub.slug}/dashboard`
+  const subscription = hub.subscription
+  const batchLimit = subscription?.capabilities?.batchLimit
+  const activeBatchCount = batches.filter((batch) => !batch.isPlanArchived).length
+  const limitReached = batchLimit !== null && activeBatchCount >= batchLimit
+  const upgradeMessage =
+    subscription?.notices?.upgradeMessage ||
+    (subscription?.effectivePlan === 'pro'
+      ? 'Upgrade to Premium to create more batches'
+      : 'Upgrade to Pro to create more batches')
 
   return (
     <div className="dashboard-page">
@@ -79,7 +88,9 @@ function BatchesList() {
             <button
               type="button"
               className="dashboard-button"
+              disabled={limitReached}
               onClick={() => {
+                if (limitReached) return
                 setShowCreateForm((current) => !current)
                 setError('')
                 setSuccess('')
@@ -94,10 +105,32 @@ function BatchesList() {
         </div>
       </section>
 
+      <section className="dashboard-panel">
+        <div className="dashboard-page__header">
+          <div>
+            <p className="dashboard-section-kicker">Plan Guardrails</p>
+            <h3>{subscription?.capabilities?.label || 'Free'} plan batch allowance</h3>
+            <p>
+              {batchLimit === null
+                ? 'Premium keeps batch creation fully open so you can scale as wide as you want.'
+                : `You are using ${activeBatchCount} of ${batchLimit} active batches in this workspace.`}
+            </p>
+          </div>
+
+          <div className="dashboard-page__actions">
+            <Link to="/become-teacher" className="dashboard-button--ghost">
+              Compare Plans
+            </Link>
+          </div>
+        </div>
+
+        {limitReached ? <p className="dashboard-info">{upgradeMessage}</p> : null}
+      </section>
+
       {error ? <p className="dashboard-alert">{error}</p> : null}
       {success ? <p className="dashboard-success">{success}</p> : null}
 
-      {showCreateForm ? (
+      {showCreateForm && !limitReached ? (
         <section className="dashboard-panel">
           <div className="dashboard-page__header">
             <div>
@@ -229,7 +262,12 @@ function BatchesList() {
           <h2>No batches yet</h2>
           <p>Create your first batch to start selling access to grouped courses and videos.</p>
           <div className="dashboard-access__actions">
-            <button type="button" className="dashboard-button" onClick={() => setShowCreateForm(true)}>
+            <button
+              type="button"
+              className="dashboard-button"
+              disabled={limitReached}
+              onClick={() => setShowCreateForm(true)}
+            >
               Create First Batch
             </button>
           </div>
@@ -249,6 +287,9 @@ function BatchesList() {
                 <div className="dashboard-pill-row">
                   <span className="dashboard-pill dashboard-pill--neutral">{formatBatchPrice(batch)}</span>
                   <span className="dashboard-pill dashboard-pill--success">{batch.courseCount} courses</span>
+                  {batch.isPlanArchived ? (
+                    <span className="dashboard-pill dashboard-pill--warning">Archived by plan</span>
+                  ) : null}
                 </div>
               </div>
 
@@ -270,6 +311,12 @@ function BatchesList() {
                   </strong>
                 </div>
               </div>
+
+              {batch.isPlanArchived ? (
+                <p className="dashboard-muted">
+                  Hidden from new students until the workspace is renewed, while enrolled students keep access.
+                </p>
+              ) : null}
 
               <div className="dashboard-inline-actions">
                 <Link to={`${basePath}/batches/${batch._id}`} className="dashboard-button">

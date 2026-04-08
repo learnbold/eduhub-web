@@ -2,6 +2,9 @@ import { NavLink, useParams } from 'react-router-dom'
 
 function Sidebar({ hub, memberRole }) {
   const { slug = '' } = useParams()
+  const subscription = hub?.subscription
+  const batchLimit = subscription?.capabilities?.batchLimit
+  const activeBatchCount = subscription?.usage?.activeBatchCount || 0
 
   const navigationItems = [
     {
@@ -31,9 +34,19 @@ function Sidebar({ hub, memberRole }) {
       badge: '05',
     },
     {
+      label: 'Teachers',
+      to: `/hub/${slug}/dashboard/teachers`,
+      badge: '06',
+    },
+    {
+      label: 'Analytics',
+      to: `/hub/${slug}/dashboard/analytics`,
+      badge: '07',
+    },
+    {
       label: 'Settings',
       to: `/hub/${slug}/dashboard/settings`,
-      badge: '06',
+      badge: '08',
     },
   ]
 
@@ -54,6 +67,16 @@ function Sidebar({ hub, memberRole }) {
       <div className="dashboard-sidebar__role">
         <span>Current role</span>
         <strong>{memberRole || 'teacher'}</strong>
+      </div>
+
+      <div className="dashboard-sidebar__role dashboard-sidebar__role--plan">
+        <span>Workspace plan</span>
+        <strong>{subscription?.capabilities?.label || 'Free'}</strong>
+        <p>
+          {batchLimit === null
+            ? `${activeBatchCount} active batches with no cap`
+            : `${activeBatchCount}/${batchLimit} active batches in use`}
+        </p>
       </div>
 
       <nav className="dashboard-sidebar__nav" aria-label="Dashboard navigation">
@@ -77,6 +100,9 @@ function Sidebar({ hub, memberRole }) {
           This workspace is batch-first: hubs own the brand, while batches now package access to
           courses, videos, students, and future notes.
         </p>
+        <NavLink to="/become-teacher" className="dashboard-link-button">
+          Manage Plan
+        </NavLink>
       </div>
     </aside>
   )
