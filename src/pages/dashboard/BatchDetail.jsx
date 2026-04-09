@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router-dom'
+import { Link, useLocation, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   addCourseToBatch,
@@ -22,12 +22,13 @@ const BATCH_TABS = [
 
 function BatchDetail() {
   const { id = '' } = useParams()
+  const location = useLocation()
   const { token } = useAuth()
   const { hub } = useOutletContext()
   const [batch, setBatch] = useState(null)
   const [hubCourses, setHubCourses] = useState([])
   const [hubVideos, setHubVideos] = useState([])
-  const [activeTab, setActiveTab] = useState('courses')
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'courses')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -135,9 +136,23 @@ function BatchDetail() {
           </div>
 
           <div className="dashboard-page__actions">
+            <Link
+              to={`${basePath}/courses/create?batchId=${batch._id}`}
+              state={{ batch }}
+              className="dashboard-button"
+            >
+              Create Course
+            </Link>
+            <Link
+              to={`${basePath}/videos/upload?batchId=${batch._id}&type=standalone`}
+              state={{ batch }}
+              className="dashboard-button--ghost"
+            >
+              Create Video
+            </Link>
             <button
               type="button"
-              className="dashboard-button"
+              className="dashboard-button--ghost"
               onClick={() => {
                 setEditing((current) => !current)
                 setError('')
@@ -343,6 +358,13 @@ function BatchDetail() {
             </div>
 
             <div className="dashboard-selector-row">
+              <Link
+                to={`${basePath}/courses/create?batchId=${batch._id}`}
+                state={{ batch }}
+                className="dashboard-button--ghost"
+              >
+                New Course
+              </Link>
               <select value={addingCourseId} onChange={(event) => setAddingCourseId(event.target.value)}>
                 <option value="">Add a course to this batch</option>
                 {availableCourses.map((course) => (
@@ -434,6 +456,13 @@ function BatchDetail() {
             </div>
 
             <div className="dashboard-selector-row">
+              <Link
+                to={`${basePath}/videos/upload?batchId=${batch._id}&type=standalone`}
+                state={{ batch }}
+                className="dashboard-button--ghost"
+              >
+                New Video
+              </Link>
               <select value={addingVideoId} onChange={(event) => setAddingVideoId(event.target.value)}>
                 <option value="">Add a video to this batch</option>
                 {availableVideos.map((video) => (
