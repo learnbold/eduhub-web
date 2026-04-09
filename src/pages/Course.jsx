@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { fetchPublicCourseBySlug } from '../utils/dashboardApi'
 import './Course.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 const courseBadges = ['Self-paced access', 'Practical lessons', 'Premium learning path']
 
 const getShortDescription = (description) => {

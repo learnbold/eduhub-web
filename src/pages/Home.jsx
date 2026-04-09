@@ -8,7 +8,7 @@ import HubCard from '../components/HubCard'
 import { mockContinueLearning, mockFeaturedCourses, mockHubs } from '../utils/mockCourses'
 import './Home.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 const skeletonCards = Array.from({ length: 8 }, (_, index) => index)
 
 const CATEGORIES = ['All', 'Development', 'Design', 'Business', 'Marketing', 'Data Science', 'Programming', 'Medical']
