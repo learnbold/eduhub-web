@@ -137,7 +137,7 @@ function CourseDetail() {
         const fileType = getVideoFileType(file)
 
         setLessonUploadStage('Preparing secure upload...')
-        const { uploadUrl, fileUrl } = await requestVideoUploadUrl(token, {
+        const { uploadUrl, r2Key } = await requestVideoUploadUrl(token, {
           courseId: course._id,
           hubId: hub._id,
           fileType,
@@ -154,7 +154,7 @@ function CourseDetail() {
           courseId: course._id,
           lessonId: lesson._id,
           hubId: hub._id,
-          videoUrl: fileUrl,
+          r2Key,
           videoType: 'course',
         })
 

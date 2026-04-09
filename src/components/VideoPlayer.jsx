@@ -3,10 +3,16 @@ import './VideoPlayer.css'
 
 function VideoPlayer({ video, onEnded }) {
   const videoRef = useRef(null)
+  const eyebrow = video?.eyebrow || (video?.order ? `Lesson ${video.order}` : 'Featured video')
+  const statusLabel = video?.statusLabel || 'Streaming ready'
 
   useEffect(() => {
     const element = videoRef.current
-    const sourceUrl = video?.url || video?.hlsUrl || video?.videoUrl
+    let sourceUrl = video?.url || video?.hlsUrl || video?.videoUrl
+
+    if (sourceUrl && !sourceUrl.startsWith('http') && !sourceUrl.startsWith('blob:')) {
+      sourceUrl = `https://cf.sparklass.com/${sourceUrl.replace(/^\/+/, '')}`
+    }
 
     if (!element || !sourceUrl) {
       return undefined
@@ -70,10 +76,10 @@ function VideoPlayer({ video, onEnded }) {
     <section className="video-player">
       <div className="video-player__header">
         <div>
-          <p className="video-player__eyebrow">{`Lesson ${video.order}`}</p>
+          <p className="video-player__eyebrow">{eyebrow}</p>
           <h2>{video.title}</h2>
         </div>
-        <span className="video-player__status">Streaming ready</span>
+        <span className="video-player__status">{statusLabel}</span>
       </div>
 
       <div className="video-player__surface" key={`${video.order}-${video.title}`}>

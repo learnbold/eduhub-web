@@ -25,7 +25,10 @@ function UploadVideo() {
   const { hub } = useOutletContext()
   const routeCourse = location.state?.course || null
   const routeLesson = location.state?.lesson || null
+  const routeBatch = location.state?.batch || null
   const selectedLessonId = searchParams.get('lessonId') || routeLesson?._id || ''
+  const selectedBatchId = searchParams.get('batchId') || routeBatch?._id || ''
+  const batchLabel = routeBatch?.title || 'Selected batch'
 
   const [courses, setCourses] = useState([])
   const [formValues, setFormValues] = useState(initialFormValues)
@@ -84,6 +87,7 @@ function UploadVideo() {
   }, [hub?._id, routeCourse, routeLesson, searchParams, selectedLessonId, token])
 
   const basePath = `/hub/${hub.slug}/dashboard`
+  const backHref = selectedBatchId ? `${basePath}/batches/${selectedBatchId}` : `${basePath}/videos`
   const selectedCourse = courses.find((course) => course._id === formValues.courseId) || routeCourse
   const isStandalone = formValues.videoType === 'standalone'
 
@@ -114,44 +118,59 @@ function UploadVideo() {
       const fileType = getVideoFileType(videoFile)
 
       setSubmitStage('Preparing secure upload...')
-      const { uploadUrl, fileUrl } = await requestVideoUploadUrl(token, {
+      const uploadPayload = {
         courseId: isStandalone ? undefined : formValues.courseId,
-        hubId: hub._id,
+        hubId: isStandalone ? hub._id : undefined,
+        batchId: selectedBatchId || undefined,
         fileType,
         videoType: formValues.videoType,
-      })
+      }
+      const { uploadUrl, r2Key } = await requestVideoUploadUrl(token, uploadPayload)
 
       setSubmitStage('Uploading video file...')
       await uploadVideoFile(uploadUrl, videoFile, fileType)
 
       setSubmitStage('Saving video record...')
-      const video = await createVideo(token, {
+      const videoPayload = {
         title: formValues.title,
         description: formValues.description,
         courseId: isStandalone ? undefined : formValues.courseId,
         lessonId: isStandalone ? undefined : selectedLessonId || undefined,
-        hubId: hub._id,
-        videoUrl: fileUrl,
+        hubId: isStandalone ? hub._id : undefined,
+        batchId: selectedBatchId || undefined,
+        r2Key,
         videoType: formValues.videoType,
-      })
+      }
+      const video = await createVideo(token, videoPayload)
 
       setSubmitStage('Starting video processing...')
       await processVideo(token, video._id)
 
       setSuccess(
         isStandalone
-          ? 'Standalone hub video uploaded. Processing has started and it will appear on the public hub once ready.'
-          : 'Course video uploaded successfully. Processing has started and the lesson will appear once ready.'
+          ? selectedBatchId
+            ? `Video uploaded and attached to ${batchLabel}. Processing has started.`
+            : 'Standalone hub video uploaded. Processing has started and it will appear on the public hub once ready.'
+          : selectedBatchId
+            ? `Course video uploaded and attached to ${batchLabel}. Processing has started.`
+            : 'Course video uploaded successfully. Processing has started and the lesson will appear once ready.'
       )
 
       setTimeout(() => {
+        if (selectedBatchId && isStandalone) {
+          navigate(`${basePath}/batches/${selectedBatchId}`, {
+            state: { batch: routeBatch, activeTab: 'videos' },
+          })
+          return
+        }
+
         if (isStandalone) {
           navigate(`${basePath}/videos`)
           return
         }
 
         navigate(`${basePath}/courses/${formValues.courseId}`, {
-          state: { course: selectedCourse || null },
+          state: { course: selectedCourse || null, batch: routeBatch },
         })
       }, 700)
     } catch (submitError) {
@@ -172,6 +191,11 @@ function UploadVideo() {
             <p>
               Publish course lessons or standalone hub updates from the same creator workflow.
             </p>
+            {selectedBatchId ? (
+              <p>
+                New uploads from this screen will also attach to <strong>{batchLabel}</strong>.
+              </p>
+            ) : null}
             {selectedLessonId ? (
               <p>
                 This upload will attach directly to <strong>{routeLesson?.title || 'the selected lesson'}</strong>.
@@ -179,8 +203,8 @@ function UploadVideo() {
             ) : null}
           </div>
           <div className="dashboard-page__actions">
-            <Link to={`${basePath}/videos`} className="dashboard-button--ghost">
-              Back to Videos
+            <Link to={backHref} className="dashboard-button--ghost">
+              {selectedBatchId ? 'Back to Batch' : 'Back to Videos'}
             </Link>
           </div>
         </div>
@@ -188,7 +212,16 @@ function UploadVideo() {
 
       {error ? <p className="dashboard-alert">{error}</p> : null}
       {success ? <p className="dashboard-success">{success}</p> : null}
-      {submitStage ? <p className="dashboard-info">{submitStage}</p> : null}
+      {submitStage ? (
+        <>
+          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+          <div className="dashboard-info dashboard-upload-status" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <p style={{ margin: 0 }}>{submitStage}</p>
+            {submitStage.includes('Uploading') && <progress value={undefined} style={{ flexGrow: 1 }} />}
+            {submitStage.includes('Processing') && <div className="spinner" style={{ border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid #fff', borderRadius: '50%', width: '1rem', height: '1rem', animation: 'spin 1s linear infinite' }}></div>}
+          </div>
+        </>
+      ) : null}
 
       {loading ? (
         <section className="dashboard-panel">
@@ -285,10 +318,14 @@ function UploadVideo() {
               Upload target:{' '}
               <strong>
                 {isStandalone
-                  ? `${hub.name} public hub feed`
+                  ? selectedBatchId
+                    ? `${batchLabel} -> ${hub.name} standalone video`
+                    : `${hub.name} public hub feed`
                   : selectedLessonId
                     ? `${selectedCourse?.title || 'Course'} -> ${routeLesson?.title || 'Selected lesson'}`
-                    : selectedCourse?.title || 'Course'}
+                    : selectedBatchId
+                      ? `${batchLabel} -> ${selectedCourse?.title || 'Course'}`
+                      : selectedCourse?.title || 'Course'}
               </strong>
             </div>
 

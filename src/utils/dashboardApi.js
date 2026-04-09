@@ -1,4 +1,22 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
+const MUTATION_METHODS = new Set(['POST', 'PATCH', 'DELETE'])
+
+const buildIdempotencyKey = (keyPrefix = 'req') =>
+  `${keyPrefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+const omitUndefinedFields = (payload) =>
+  Object.fromEntries(Object.entries(payload || {}).filter(([, value]) => value !== undefined))
+
+export const withIdempotency = (headers = {}, keyPrefix = 'req') => {
+  if (headers['Idempotency-Key']) {
+    return headers
+  }
+
+  return {
+    ...headers,
+    'Idempotency-Key': buildIdempotencyKey(keyPrefix),
+  }
+}
 
 const buildErrorMessage = (payload, fallbackMessage) => {
   if (payload?.message) {
@@ -200,15 +218,19 @@ export const normalizeVideo = (video) => {
     return null
   }
 
+  const normalizedHlsUrl = video.hlsUrl
+    ? (video.hlsUrl.startsWith('http') ? video.hlsUrl : `https://cf.sparklass.com/${video.hlsUrl}`)
+    : ''
+
   return {
     ...video,
     _id: video._id || video.id || '',
     videoType: video.videoType || 'course',
     order: Number(video.order || 0),
     duration: video.duration === undefined || video.duration === null ? null : Number(video.duration),
-    videoUrl: video.videoUrl || '',
-    hlsUrl: video.hlsUrl || '',
-    url: video.url || video.hlsUrl || video.videoUrl || '',
+    r2Key: video.r2Key || '',
+    hlsUrl: normalizedHlsUrl,
+    url: video.url || normalizedHlsUrl || video.videoUrl || '',
     status: video.status || 'uploading',
   }
 }
@@ -303,19 +325,29 @@ export const getVideoFileType = (file) => {
 
 export const request = async (
   endpoint,
-  { method = 'GET', token = '', body, headers = {}, signal } = {},
+  { method = 'GET', token = '', body, headers = {}, signal, idempotencyKey, idempotencyKeyPrefix = 'req' } = {},
   fallbackMessage = 'Request failed.'
 ) => {
   try {
+    const normalizedMethod = String(method || 'GET').toUpperCase()
+    const resolvedBody =
+      body && typeof body === 'object' && !Array.isArray(body) ? omitUndefinedFields(body) : body
+    const baseHeaders = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(resolvedBody ? { 'Content-Type': 'application/json' } : {}),
+      ...headers,
+    }
+    const resolvedHeaders = MUTATION_METHODS.has(normalizedMethod)
+      ? idempotencyKey
+        ? { ...baseHeaders, 'Idempotency-Key': idempotencyKey }
+        : withIdempotency(baseHeaders, idempotencyKeyPrefix)
+      : baseHeaders
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method,
+      method: normalizedMethod,
       signal,
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...headers,
-      },
-      body: body ? JSON.stringify(body) : undefined,
+      headers: resolvedHeaders,
+      body: resolvedBody ? JSON.stringify(resolvedBody) : undefined,
     })
 
     const payload = await response.json().catch(() => null)
@@ -356,6 +388,29 @@ export const fetchManagedHubBySlug = (token, slug, signal) =>
 
 export const fetchPublicHub = (slug, signal) =>
   request(`/hub/${slug}`, { signal }, 'Failed to load this hub.').then(normalizeHub)
+
+export const fetchPublicHubPage = async (slug, signal) => {
+  const hubPayload = await request(`/hub/${slug}`, { signal }, 'Failed to load this hub.')
+  const hub = normalizeHub(hubPayload?.hub || hubPayload)
+
+  if (!hub?._id) {
+    return {
+      hub,
+      batches: [],
+      courses: [],
+      videos: [],
+    }
+  }
+
+  const payload = await request(`/hubs/${hub._id}/public`, { signal }, 'Failed to load this hub.')
+
+  return {
+    hub: normalizeHub(payload?.hub || hub),
+    batches: (Array.isArray(payload?.batches) ? payload.batches : []).map(normalizeBatch).filter(Boolean),
+    courses: (Array.isArray(payload?.courses) ? payload.courses : []).map(normalizeCourse).filter(Boolean),
+    videos: (Array.isArray(payload?.videos) ? payload.videos : []).map(normalizeVideo).filter(Boolean),
+  }
+}
 
 export const fetchPublicHubCourses = (hubId, signal) =>
   request(`/courses/hub/${hubId}`, { signal }, 'Failed to load public hub courses.').then((data) =>
@@ -408,15 +463,23 @@ export const fetchHubTeam = (token, hubId, signal) =>
   }))
 
 export const addHubTeacher = (token, hubId, payload) =>
-  request(`/hub/${hubId}/add-teacher`, { method: 'POST', token, body: payload }, 'Failed to add teacher.')
+  request(
+    `/hub/${hubId}/add-teacher`,
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'hub-teacher') },
+    'Failed to add teacher.'
+  )
 
 export const addHubAdmin = (token, hubId, payload) =>
-  request(`/hub/${hubId}/add-admin`, { method: 'POST', token, body: payload }, 'Failed to add admin.')
+  request(
+    `/hub/${hubId}/add-admin`,
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'hub-admin') },
+    'Failed to add admin.'
+  )
 
 export const updateHubSettings = (token, hubId, payload) =>
   request(
     `/hub/${hubId}/settings`,
-    { method: 'PATCH', token, body: payload },
+    { method: 'PATCH', token, body: payload, headers: withIdempotency({}, 'hub-settings') },
     'Failed to update hub settings.'
   ).then((response) => ({
     ...response,
@@ -432,31 +495,46 @@ export const fetchHubActivity = (token, hubId, signal) =>
   )
 
 export const createCourse = (token, payload) =>
-  request('/courses', { method: 'POST', token, body: payload }, 'Failed to create course.').then(
-    normalizeCourse
-  )
+  request(
+    '/courses',
+    {
+      method: 'POST',
+      token,
+      body: payload,
+      headers: withIdempotency({}, 'course'),
+    },
+    'Failed to create course.'
+  ).then(normalizeCourse)
 
 export const createBatch = (token, payload) =>
-  request('/batches', { method: 'POST', token, body: payload }, 'Failed to create batch.').then(
+  request(
+    '/batches',
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'batch') },
+    'Failed to create batch.'
+  ).then(
     normalizeBatch
   )
 
 export const updateBatch = (token, batchId, payload) =>
-  request(`/batches/${batchId}`, { method: 'PATCH', token, body: payload }, 'Failed to update batch.').then(
+  request(
+    `/batches/${batchId}`,
+    { method: 'PATCH', token, body: payload, headers: withIdempotency({}, 'batch-update') },
+    'Failed to update batch.'
+  ).then(
     normalizeBatch
   )
 
 export const addCourseToBatch = (token, batchId, courseId) =>
   request(
     `/batches/${batchId}/courses`,
-    { method: 'POST', token, body: { courseId } },
+    { method: 'POST', token, body: { courseId }, headers: withIdempotency({}, 'batch-course') },
     'Failed to add course to batch.'
   ).then(normalizeBatch)
 
 export const addVideoToBatch = (token, batchId, videoId) =>
   request(
     `/batches/${batchId}/videos`,
-    { method: 'POST', token, body: { videoId } },
+    { method: 'POST', token, body: { videoId }, headers: withIdempotency({}, 'batch-video') },
     'Failed to add video to batch.'
   ).then(normalizeBatch)
 
@@ -475,7 +553,11 @@ export const removeVideoFromBatch = (token, batchId, videoId) =>
   ).then(normalizeBatch)
 
 export const enrollInBatch = (token, batchId) =>
-  request(`/batches/${batchId}/enroll`, { method: 'POST', token }, 'Failed to enroll in batch.').then(
+  request(
+    `/batches/${batchId}/enroll`,
+    { method: 'POST', token, headers: withIdempotency({}, 'batch-enroll') },
+    'Failed to enroll in batch.'
+  ).then(
     (response) => ({
       ...response,
       batch: normalizeBatch(response?.batch),
@@ -485,21 +567,21 @@ export const enrollInBatch = (token, batchId) =>
 export const updateCourse = (token, courseId, payload) =>
   request(
     `/courses/${courseId}`,
-    { method: 'PATCH', token, body: payload },
+    { method: 'PATCH', token, body: payload, headers: withIdempotency({}, 'course-update') },
     'Failed to update course.'
   ).then(normalizeCourse)
 
 export const publishCourse = (token, courseId) =>
   request(
     `/courses/${courseId}/publish`,
-    { method: 'PATCH', token },
+    { method: 'PATCH', token, headers: withIdempotency({}, 'publish') },
     'Failed to publish course.'
   ).then(normalizeCourse)
 
 export const archiveCourse = (token, courseId) =>
   request(
     `/courses/${courseId}/archive`,
-    { method: 'PATCH', token },
+    { method: 'PATCH', token, headers: withIdempotency({}, 'course-archive') },
     'Failed to archive course.'
   ).then(normalizeCourse)
 
@@ -514,26 +596,41 @@ export const fetchLessonsByModule = (token, moduleId, signal) =>
   )
 
 export const createModule = (token, payload) =>
-  request('/modules', { method: 'POST', token, body: payload }, 'Failed to create module.').then(
+  request(
+    '/modules',
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'module') },
+    'Failed to create module.'
+  ).then(
     normalizeModule
   )
 
 export const createLesson = (token, payload) =>
-  request('/lessons', { method: 'POST', token, body: payload }, 'Failed to create lesson.').then(
+  request(
+    '/lessons',
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'lesson') },
+    'Failed to create lesson.'
+  ).then(
     normalizeLesson
   )
+
+export const updateLesson = (token, lessonId, payload) =>
+  request(
+    `/lessons/${lessonId}`,
+    { method: 'PATCH', token, body: payload, headers: withIdempotency({}, 'lesson-update') },
+    'Failed to update lesson.'
+  ).then(normalizeLesson)
 
 export const attachLessonVideo = (token, lessonId, videoId) =>
   request(
     `/lessons/${lessonId}/attach-video`,
-    { method: 'PATCH', token, body: { videoId } },
+    { method: 'PATCH', token, body: { videoId }, headers: withIdempotency({}, 'lesson-video') },
     'Failed to attach video to lesson.'
   ).then(normalizeLesson)
 
 export const requestVideoUploadUrl = (token, payload) =>
   request(
     '/videos/upload-url',
-    { method: 'POST', token, body: payload },
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'video-upload') },
     'Failed to prepare the video upload.'
   )
 
@@ -560,9 +657,24 @@ export const uploadVideoFile = async (uploadUrl, file, fileType) => {
 }
 
 export const createVideo = (token, payload) =>
-  request('/videos', { method: 'POST', token, body: payload }, 'Failed to save the uploaded video.').then(
-    normalizeVideo
-  )
+  request(
+    '/videos',
+    {
+      method: 'POST',
+      token,
+      body: payload,
+      headers: withIdempotency({}, 'video'),
+    },
+    'Failed to save the uploaded video.'
+  ).then(normalizeVideo)
 
 export const processVideo = (token, videoId) =>
-  request(`/videos/${videoId}/process`, { method: 'POST', token }, 'Failed to start video processing.')
+  request(
+    `/videos/${videoId}/process`,
+    {
+      method: 'POST',
+      token,
+      idempotencyKey: buildIdempotencyKey(`process-${videoId}`),
+    },
+    'Failed to start video processing.'
+  )

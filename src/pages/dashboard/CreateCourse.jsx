@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { createCourse, fileToDataUrl } from '../../utils/dashboardApi'
 
@@ -12,8 +12,16 @@ const initialCourseValues = {
 
 function CreateCourse() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { token } = useAuth()
   const { hub } = useOutletContext()
+  const routeBatch = location.state?.batch || null
+  const selectedBatchId = searchParams.get('batchId') || routeBatch?._id || ''
+  const batchLabel = routeBatch?.title || 'Selected batch'
+  const backHref = selectedBatchId
+    ? `/hub/${hub.slug}/dashboard/batches/${selectedBatchId}`
+    : `/hub/${hub.slug}/dashboard/courses`
   const [courseValues, setCourseValues] = useState(initialCourseValues)
   const [thumbnailFile, setThumbnailFile] = useState(null)
   const [thumbnailPreview, setThumbnailPreview] = useState('')
@@ -60,9 +68,8 @@ function CreateCourse() {
 
       const thumbnail = thumbnailFile ? await fileToDataUrl(thumbnailFile) : ''
       const priceValue = Number(courseValues.price || 0)
-
-      const course = await createCourse(token, {
-        title: courseValues.title,
+      const payload = {
+        title: courseValues.title.trim(),
         description: courseValues.description,
         category: courseValues.category,
         hubId: hub._id,
@@ -71,13 +78,20 @@ function CreateCourse() {
         thumbnail,
         level: 'beginner',
         tags: [],
-      })
+        ...(selectedBatchId ? { batchId: selectedBatchId } : {}),
+      }
 
-      setSuccess('Course created successfully. Opening the course workspace...')
+      const course = await createCourse(token, payload)
+
+      setSuccess(
+        selectedBatchId
+          ? `Course created and attached to ${batchLabel}. Opening the course workspace...`
+          : 'Course created successfully. Opening the course workspace...'
+      )
 
       setTimeout(() => {
         navigate(`/hub/${hub.slug}/dashboard/courses/${course._id}`, {
-          state: { course },
+          state: { course, batch: routeBatch },
         })
       }, 500)
     } catch (submitError) {
@@ -94,12 +108,16 @@ function CreateCourse() {
           <div>
             <p className="dashboard-section-kicker">Create Course</p>
             <h2>Create a course for {hub.name}</h2>
-            <p>New courses created here automatically belong to this hub and its governance model.</p>
+            <p>
+              {selectedBatchId
+                ? `This course will be created inside ${batchLabel} and stay reusable across the hub.`
+                : 'New courses created here automatically belong to this hub and its governance model.'}
+            </p>
           </div>
 
           <div className="dashboard-page__actions">
-            <Link to={`/hub/${hub.slug}/dashboard/courses`} className="dashboard-button--ghost">
-              Back to Courses
+            <Link to={backHref} className="dashboard-button--ghost">
+              {selectedBatchId ? 'Back to Batch' : 'Back to Courses'}
             </Link>
           </div>
         </div>
@@ -113,6 +131,7 @@ function CreateCourse() {
           <p className="dashboard-section-kicker">Hub Assignment</p>
           <h2>{hub.name}</h2>
           <p className="dashboard-muted">{`Public route: /hub/${hub.slug}`}</p>
+          {selectedBatchId ? <p className="dashboard-info">Batch destination: {batchLabel}</p> : null}
         </div>
 
         <form className="dashboard-form" onSubmit={handleSubmit}>

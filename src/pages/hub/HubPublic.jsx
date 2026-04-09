@@ -1,23 +1,65 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Footer from '../../components/Footer'
 import Navbar from '../../components/Navbar'
-import {
-  fetchPublicHub,
-  fetchPublicHubCourses,
-  fetchPublicHubStandaloneVideos,
-  formatPrice,
-} from '../../utils/dashboardApi'
+import VideoPlayer from '../../components/VideoPlayer'
+import { fetchPublicHubPage, formatBatchPrice, formatPrice } from '../../utils/dashboardApi'
 import './HubPublic.css'
+
+const TAB_IDS = ['home', 'batches', 'courses', 'videos', 'notes']
+const SITE_NAV_OFFSET = 84
+
+const getInitial = (value = '') => value.trim().charAt(0).toUpperCase() || 'H'
+
+const formatCount = (value) => Number(value || 0).toLocaleString()
+
+const formatVideoDate = (value) => {
+  if (!value) {
+    return 'Recently added'
+  }
+
+  const dateValue = new Date(value)
+
+  if (Number.isNaN(dateValue.getTime())) {
+    return 'Recently added'
+  }
+
+  return dateValue.toLocaleDateString()
+}
+
+const matchesQuery = (items, query, fields) => {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  if (!normalizedQuery) {
+    return items
+  }
+
+  return items.filter((item) =>
+    fields.some((field) => String(item?.[field] || '').toLowerCase().includes(normalizedQuery))
+  )
+}
+
+const getPreviewDescription = (item, fallback) => item?.description || fallback
 
 function HubPublic() {
   const navigate = useNavigate()
   const { slug = '' } = useParams()
-  const [hub, setHub] = useState(null)
-  const [courses, setCourses] = useState([])
-  const [standaloneVideos, setStandaloneVideos] = useState([])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const identityRef = useRef(null)
+
+  const [hubPage, setHubPage] = useState({
+    hub: null,
+    batches: [],
+    courses: [],
+    videos: [],
+  })
+  const [selectedVideoId, setSelectedVideoId] = useState('')
+  const [searchValue, setSearchValue] = useState(searchParams.get('q') || '')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [isCompactNavPinned, setIsCompactNavPinned] = useState(false)
+
+  const activeTab = TAB_IDS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'home'
 
   useEffect(() => {
     const controller = new AbortController()
@@ -27,26 +69,26 @@ function HubPublic() {
         setLoading(true)
         setError('')
 
-        const nextHub = await fetchPublicHub(slug, controller.signal)
-        const [nextCourses, nextStandaloneVideos] = nextHub?._id
-          ? await Promise.all([
-              fetchPublicHubCourses(nextHub._id, controller.signal),
-              fetchPublicHubStandaloneVideos(nextHub._id, controller.signal),
-            ])
-          : [[], []]
+        const payload = await fetchPublicHubPage(slug, controller.signal)
 
         if (controller.signal.aborted) {
           return
         }
 
-        setHub(nextHub)
-        setCourses(nextCourses)
-        setStandaloneVideos(nextStandaloneVideos)
+        setHubPage({
+          hub: payload?.hub || null,
+          batches: Array.isArray(payload?.batches) ? payload.batches : [],
+          courses: Array.isArray(payload?.courses) ? payload.courses : [],
+          videos: Array.isArray(payload?.videos) ? payload.videos : [],
+        })
       } catch (loadError) {
         if (!controller.signal.aborted) {
-          setHub(null)
-          setCourses([])
-          setStandaloneVideos([])
+          setHubPage({
+            hub: null,
+            batches: [],
+            courses: [],
+            videos: [],
+          })
           setError(loadError.message || 'Failed to load this public hub.')
         }
       } finally {
@@ -61,32 +103,299 @@ function HubPublic() {
     return () => controller.abort()
   }, [slug])
 
-  const teacherRoster = useMemo(() => {
-    if (!hub) {
+  useEffect(() => {
+    setSearchValue(searchParams.get('q') || '')
+  }, [searchParams])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const identityBottom = identityRef.current?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY
+      setIsCompactNavPinned(identityBottom <= SITE_NAV_OFFSET + 12)
+    }
+
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const hub = hubPage.hub
+  const batches = useMemo(
+    () => hubPage.batches.filter((batch) => batch.isPublished && !batch.isPlanArchived),
+    [hubPage.batches]
+  )
+  const courses = useMemo(
+    () => hubPage.courses.filter((course) => course.isPublished || course.status === 'published'),
+    [hubPage.courses]
+  )
+  const videos = useMemo(
+    () => hubPage.videos.filter((video) => video.status === 'ready' && !video.isPaid),
+    [hubPage.videos]
+  )
+
+  const filteredBatches = useMemo(
+    () => matchesQuery(batches, searchValue, ['title', 'description']),
+    [batches, searchValue]
+  )
+  const filteredCourses = useMemo(
+    () => matchesQuery(courses, searchValue, ['title', 'description', 'category']),
+    [courses, searchValue]
+  )
+  const filteredVideos = useMemo(
+    () => matchesQuery(videos, searchValue, ['title', 'description', 'courseTitle', 'lessonTitle']),
+    [videos, searchValue]
+  )
+
+  const selectedVideo = useMemo(
+    () => filteredVideos.find((video) => video._id === selectedVideoId) || videos.find((video) => video._id === selectedVideoId) || null,
+    [filteredVideos, selectedVideoId, videos]
+  )
+
+  useEffect(() => {
+    if (selectedVideoId && !selectedVideo) {
+      setSelectedVideoId('')
+    }
+  }, [selectedVideo, selectedVideoId])
+
+  const relatedVideos = useMemo(() => {
+    if (!selectedVideo) {
       return []
     }
 
-    const seen = new Set()
-    const roster = [hub.ownerProfile, ...(hub.teachers || [])].filter(Boolean)
+    return filteredVideos
+      .filter((video) => video._id !== selectedVideo._id)
+      .sort((left, right) => {
+        const leftScore = left.courseSlug === selectedVideo.courseSlug ? 0 : 1
+        const rightScore = right.courseSlug === selectedVideo.courseSlug ? 0 : 1
+        return leftScore - rightScore
+      })
+      .slice(0, 8)
+  }, [filteredVideos, selectedVideo])
 
-    return roster.filter((member) => {
-      if (!member?._id || seen.has(member._id)) {
-        return false
-      }
-
-      seen.add(member._id)
-      return true
-    })
-  }, [hub])
+  const ownerName = hub?.ownerProfile?.displayName || hub?.name || 'Hub owner'
+  const bioText = hub?.description || 'Teaching with clarity. Learning with purpose.'
+  const noteCount = batches.reduce((total, batch) => total + Number(batch.noteCount || 0), 0)
+  const studentCount = batches.reduce((total, batch) => total + Number(batch.studentCount || 0), 0)
+  const contentCount = batches.length + courses.length + videos.length
 
   const pageStyle = hub
     ? {
-        '--hub-primary': hub.primaryColor || '#0f172a',
-        '--hub-secondary': hub.secondaryColor || '#f59e0b',
+        '--hub-primary': hub.primaryColor || '#6C63FF',
+        '--hub-secondary': hub.secondaryColor || '#38BDF8',
+      }
+    : undefined
+  const bannerStyle = hub?.banner
+    ? {
+        backgroundImage: `linear-gradient(180deg, rgba(15, 17, 23, 0) 35%, rgba(15, 17, 23, 0.84) 100%), url(${hub.banner})`,
       }
     : undefined
 
-  const ownerName = hub?.ownerProfile?.displayName || hub?.name || 'Teacher'
+  const heroVideo = selectedVideo
+    ? {
+        ...selectedVideo,
+        eyebrow:
+          selectedVideo.sourceType === 'course'
+            ? `${selectedVideo.courseTitle || 'Course'} preview`
+            : 'Free hub video',
+        statusLabel: selectedVideo.sourceType === 'course' ? 'Preview ready' : 'Watch now',
+      }
+    : null
+
+  const updateParams = (updates) => {
+    const nextParams = new URLSearchParams(searchParams)
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!value) {
+        nextParams.delete(key)
+        return
+      }
+
+      nextParams.set(key, value)
+    })
+
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  const handleTabChange = (tabId) => {
+    updateParams({
+      tab: tabId === 'home' ? '' : tabId,
+      q: searchValue.trim() || '',
+    })
+  }
+
+  const handleSearchChange = (event) => {
+    const nextValue = event.target.value
+    setSearchValue(nextValue)
+    updateParams({
+      tab: activeTab === 'home' ? '' : activeTab,
+      q: nextValue.trim() || '',
+    })
+  }
+
+  const renderCard = (item, type, variant = 'grid') => {
+    const title = item.title
+    const description =
+      type === 'batches'
+        ? getPreviewDescription(item, 'A focused batch for learners joining this hub.')
+        : type === 'courses'
+          ? getPreviewDescription(item, 'A published learning program from this hub.')
+          : getPreviewDescription(item, 'Ready to watch.')
+    const thumbnail = item.thumbnail || item.courseThumbnail || ''
+    const priceLabel =
+      type === 'courses'
+        ? Number(item.price || 0) > 0
+          ? formatPrice(item)
+          : ''
+        : type === 'batches'
+          ? Number(item.price || 0) > 0
+            ? formatBatchPrice(item)
+            : ''
+          : ''
+    const cardClass =
+      variant === 'rail' ? 'hub-public-content-card hub-public-content-card--rail' : 'hub-public-content-card'
+
+    const thumbnailNode = thumbnail ? (
+      <img src={thumbnail} alt={`${title} thumbnail`} />
+    ) : (
+      <div className="hub-public-card-media__fallback">
+        <span>{getInitial(title)}</span>
+      </div>
+    )
+
+    if (type === 'videos') {
+      return (
+        <button
+          key={item._id}
+          type="button"
+          className={`${cardClass} ${selectedVideoId === item._id ? 'is-active' : ''}`}
+          onClick={() => setSelectedVideoId(item._id)}
+        >
+          <div className="hub-public-card-media">
+            {thumbnailNode}
+            <span className="hub-public-card-media__action">Play</span>
+          </div>
+          <div className="hub-public-content-card__copy">
+            <h3>{title}</h3>
+            <p>{description}</p>
+            <span className="hub-public-content-card__meta">
+              {item.courseTitle || formatVideoDate(item.publishedAt || item.createdAt)}
+            </span>
+          </div>
+        </button>
+      )
+    }
+
+    if (type === 'courses') {
+      return (
+        <button
+          key={item._id || item.slug}
+          type="button"
+          className={cardClass}
+          onClick={() => {
+            if (!item.slug) {
+              return
+            }
+
+            navigate(`/course/${item.slug}`, { state: { course: item } })
+          }}
+        >
+          <div className="hub-public-card-media">
+            {thumbnailNode}
+            {priceLabel ? <span className="hub-public-price-badge">{priceLabel}</span> : null}
+          </div>
+          <div className="hub-public-content-card__copy">
+            <h3>{title}</h3>
+            <p>{description}</p>
+          </div>
+        </button>
+      )
+    }
+
+    return (
+      <article key={item._id} className={cardClass}>
+        <div className="hub-public-card-media">
+          {thumbnailNode}
+          {priceLabel ? <span className="hub-public-price-badge">{priceLabel}</span> : null}
+        </div>
+        <div className="hub-public-content-card__copy">
+          <h3>{title}</h3>
+          <p>{description}</p>
+          <span className="hub-public-content-card__meta">
+            {formatCount(item.studentCount || 0)} students
+          </span>
+        </div>
+      </article>
+    )
+  }
+
+  const renderSection = (tabId, label, title, items, type) => (
+    <section className="hub-public-section">
+      <div className="hub-public-section__header">
+        <div>
+          <h2 className="hub-public-section__title">{label}</h2>
+        </div>
+        <button
+          type="button"
+          className="hub-public-section__link"
+          onClick={() => handleTabChange(tabId)}
+        >
+          See All &rarr;
+        </button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="hub-public-empty-state">
+          <p>No content available yet.</p>
+        </div>
+      ) : (
+        <div className="hub-public-rail">{items.map((item) => renderCard(item, type, 'rail'))}</div>
+      )}
+    </section>
+  )
+
+  const renderGridTab = (items, type, emptyMessage) => {
+    if (items.length === 0) {
+      return (
+        <div className="hub-public-empty-state hub-public-empty-state--panel">
+          <p>{emptyMessage}</p>
+        </div>
+      )
+    }
+
+    return <div className="hub-public-grid">{items.map((item) => renderCard(item, type))}</div>
+  }
+
+  const contentByTab = {
+    home: (
+      <>
+        {renderSection('batches', 'Batches', 'Structured learning paths', filteredBatches, 'batches')}
+        {renderSection('courses', 'Courses', 'Published programs', filteredCourses, 'courses')}
+        {renderSection('videos', 'Videos', 'Free videos to watch now', filteredVideos, 'videos')}
+        <section className="hub-public-section">
+          <div className="hub-public-section__header">
+            <div>
+              <h2 className="hub-public-section__title">Notes</h2>
+            </div>
+            <button type="button" className="hub-public-section__link" onClick={() => handleTabChange('notes')}>
+              See All &rarr;
+            </button>
+          </div>
+
+          <div className="hub-public-empty-state">
+            <p>Notes will appear here as soon as this hub publishes them.</p>
+          </div>
+        </section>
+      </>
+    ),
+    batches: renderGridTab(filteredBatches, 'batches', 'No batches available yet.'),
+    courses: renderGridTab(filteredCourses, 'courses', 'No courses available yet.'),
+    videos: renderGridTab(filteredVideos, 'videos', 'No videos available yet.'),
+    notes: (
+      <div className="hub-public-empty-state hub-public-empty-state--panel">
+        <p>Notes are not published on this hub yet.</p>
+      </div>
+    ),
+  }
 
   return (
     <div className="hub-public-shell" style={pageStyle}>
@@ -94,167 +403,140 @@ function HubPublic() {
 
       <main className="hub-public-page">
         {loading ? (
-          <section className="hub-public-card">
-            <p>Loading public hub...</p>
+          <section className="hub-public-state-card">
+            <h1>Loading hub channel...</h1>
+            <p>Gathering batches, courses, and free videos.</p>
           </section>
         ) : error || !hub ? (
-          <section className="hub-public-card hub-public-empty">
+          <section className="hub-public-state-card">
             <h1>Hub unavailable</h1>
             <p>{error || 'This hub could not be found.'}</p>
           </section>
         ) : (
           <>
-            <section className="hub-public-hero">
-              <div className="hub-public-hero__backdrop">
-                {hub.banner ? <img src={hub.banner} alt={`${hub.name} banner`} /> : null}
+            <section className="hub-public-banner" style={bannerStyle} />
+
+            <section ref={identityRef} className="hub-public-identity-block">
+              <div className="hub-public-identity-block__avatar-wrap">
+                {hub.logo ? (
+                  <img src={hub.logo} alt={`${hub.name} avatar`} className="hub-public-identity-block__avatar" />
+                ) : (
+                  <div className="hub-public-identity-block__avatar hub-public-identity-block__avatar--fallback">
+                    {getInitial(hub.name)}
+                  </div>
+                )}
               </div>
 
-              <div className="hub-public-hero__content">
-                <div className="hub-public-brand">
-                  {hub.logo ? (
-                    <img src={hub.logo} alt={`${hub.name} logo`} className="hub-public-brand__logo" />
-                  ) : (
-                    <div className="hub-public-brand__fallback">{hub.name?.slice(0, 1) || 'H'}</div>
-                  )}
+              <div className="hub-public-identity-block__body">
+                <h1>{hub.name}</h1>
+                <p className="hub-public-identity-block__bio">{bioText}</p>
+                <div className="hub-public-identity-block__meta">
+                  <span>{formatCount(batches.length)} Batches</span>
+                  <span>{formatCount(videos.length)} Videos</span>
+                  <span>{formatCount(studentCount)} Students</span>
+                  <span>{formatCount(contentCount)} Content Items</span>
+                  {noteCount > 0 ? <span>{formatCount(noteCount)} Notes</span> : null}
+                </div>
+              </div>
+            </section>
 
-                  <div>
-                    <p className="hub-public-kicker">Teacher Hub</p>
-                    <h1>{hub.name}</h1>
-                    <p>{hub.description || `${ownerName}'s personal teaching hub on Sparklass.`}</p>
+            <nav
+              className={
+                isCompactNavPinned
+                  ? 'hub-public-tabs hub-public-tabs--pinned'
+                  : 'hub-public-tabs'
+              }
+            >
+              <div className="hub-public-tabs__inner">
+                <div className="hub-public-tabs__items">
+                  {TAB_IDS.map((tabId) => (
+                    <button
+                      key={tabId}
+                      type="button"
+                      className={activeTab === tabId ? 'hub-public-tab is-active' : 'hub-public-tab'}
+                      onClick={() => handleTabChange(tabId)}
+                    >
+                      {tabId.charAt(0).toUpperCase() + tabId.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="hub-public-search" aria-label="Search content">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M10.5 4a6.5 6.5 0 1 0 4.06 11.58l4.43 4.43 1.41-1.41-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search content..."
+                    value={searchValue}
+                    onChange={handleSearchChange}
+                  />
+                </label>
+              </div>
+            </nav>
+
+            {selectedVideo ? (
+              <section className="hub-public-player-zone">
+                <div className="hub-public-player-zone__panel">
+                  <VideoPlayer video={heroVideo} />
+                </div>
+
+                <div className="hub-public-player-zone__details">
+                  <div className="hub-public-player-zone__copy">
+                    <p className="hub-public-section__label" style={{ margin: 0, marginBottom: '6px' }}>Now Playing</p>
+                    <h2 className="hub-public-section__title" style={{ fontSize: '18px' }}>{selectedVideo.title}</h2>
+                    <p>
+                      {selectedVideo.courseTitle
+                        ? `${selectedVideo.courseTitle} - ${formatVideoDate(selectedVideo.publishedAt || selectedVideo.createdAt)}`
+                        : formatVideoDate(selectedVideo.publishedAt || selectedVideo.createdAt)}
+                    </p>
+                  </div>
+
+                  <div className="hub-public-player-zone__actions">
+                    {selectedVideo.courseSlug ? (
+                      <button
+                        type="button"
+                        className="hub-public-cta"
+                        onClick={() => navigate(`/course/${selectedVideo.courseSlug}`)}
+                      >
+                        View Full Course
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="hub-public-cta hub-public-cta--ghost"
+                      onClick={() => setSelectedVideoId('')}
+                    >
+                      Close Player
+                    </button>
                   </div>
                 </div>
 
-                <div className="hub-public-actions">
-                  <Link to="/" className="hub-public-link">
-                    Explore All Courses
-                  </Link>
-                </div>
-              </div>
-
-              <div className="hub-public-meta">
-                <div>
-                  <span>Owner</span>
-                  <strong>{ownerName}</strong>
-                </div>
-                <div>
-                  <span>Courses</span>
-                  <strong>{courses.length}</strong>
-                </div>
-                <div>
-                  <span>Hub Updates</span>
-                  <strong>{standaloneVideos.length}</strong>
-                </div>
-                <div>
-                  <span>Teachers</span>
-                  <strong>{teacherRoster.length}</strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="hub-public-card">
-              <div className="hub-public-section-head">
-                <div>
-                  <p className="hub-public-kicker">Courses</p>
-                  <h2>Courses from this hub</h2>
-                </div>
-              </div>
-            </section>
-
-            {courses.length === 0 ? (
-              <section className="hub-public-card hub-public-empty">
-                <h3>No public courses yet</h3>
-                <p>Courses from this hub will appear here once they are published.</p>
-              </section>
-            ) : (
-              <section className="hub-public-grid">
-                {courses.map((course) => (
-                  <article key={course._id || course.slug} className="hub-public-course">
-                    <div className="hub-public-course__header">
-                      <div>
-                        <h3>{course.title}</h3>
-                        <p>{course.description || 'No description yet.'}</p>
-                      </div>
-                      <span className="hub-public-pill">{course.category}</span>
+                <div className="hub-public-related">
+                  <div className="hub-public-section__header">
+                    <div>
+                      <h2 className="hub-public-section__title">Related Videos</h2>
                     </div>
+                  </div>
 
-                    <p>{formatPrice(course)}</p>
-
-                    <div className="hub-public-actions">
-                      <button
-                        type="button"
-                        className="hub-public-link"
-                        onClick={() =>
-                          navigate(`/course/${course.slug}`, {
-                            state: { course },
-                          })
-                        }
-                      >
-                        View Course
-                      </button>
+                  {relatedVideos.length === 0 ? (
+                    <div className="hub-public-empty-state">
+                      <p>No related videos available yet.</p>
                     </div>
-                  </article>
-                ))}
-              </section>
-            )}
-
-            <section className="hub-public-card">
-              <div className="hub-public-section-head">
-                <div>
-                  <p className="hub-public-kicker">Free Content</p>
-                  <h2>Hub updates and standalone videos</h2>
-                </div>
-              </div>
-            </section>
-
-            {standaloneVideos.length === 0 ? (
-              <section className="hub-public-card hub-public-empty">
-                <h3>No hub updates yet</h3>
-                <p>Standalone free videos and announcements will appear here.</p>
-              </section>
-            ) : (
-              <section className="hub-public-grid">
-                {standaloneVideos.map((video) => (
-                  <article key={video._id} className="hub-public-course">
-                    <div className="hub-public-course__header">
-                      <div>
-                        <h3>{video.title}</h3>
-                        <p>{video.description || 'Standalone hub update.'}</p>
-                      </div>
-                      <span className="hub-public-pill">Update</span>
+                  ) : (
+                    <div className="hub-public-grid hub-public-grid--related">
+                      {relatedVideos.map((video) => renderCard(video, 'videos'))}
                     </div>
-
-                    <p>
-                      {video.createdAt
-                        ? new Date(video.createdAt).toLocaleDateString()
-                        : 'Recently published'}
-                    </p>
-                  </article>
-                ))}
+                  )}
+                </div>
               </section>
-            )}
+            ) : null}
 
-            <section className="hub-public-card">
-              <div className="hub-public-section-head">
-                <div>
-                  <p className="hub-public-kicker">Teachers</p>
-                  <h2>Meet the team behind this hub</h2>
-                </div>
-              </div>
-
-              {teacherRoster.length === 0 ? (
-                <div className="hub-public-empty">
-                  <p>No teachers have been listed for this hub yet.</p>
-                </div>
-              ) : (
-                <div className="hub-public-team">
-                  {teacherRoster.map((member) => (
-                    <article key={member._id} className="hub-public-member">
-                      <strong>{member.displayName}</strong>
-                      <p>{member.email || member.username || 'Sparklass teacher'}</p>
-                    </article>
-                  ))}
-                </div>
-              )}
+            <section key={`${activeTab}-${searchValue}`} className="hub-public-content-stage">
+              {contentByTab[activeTab]}
             </section>
           </>
         )}
