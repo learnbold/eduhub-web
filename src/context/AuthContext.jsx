@@ -71,7 +71,7 @@ const requestAuth = async (endpoint, payload) => {
 const requestAuthorized = async (
   endpoint,
   token,
-  { method = 'GET', body, signal } = {}
+  { method = 'GET', body, signal, headers = {} } = {}
 ) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -80,6 +80,7 @@ const requestAuthorized = async (
       headers: {
         ...(body ? { 'Content-Type': 'application/json' } : {}),
         Authorization: `Bearer ${token}`,
+        ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,
     })
@@ -246,8 +247,13 @@ export function AuthProvider({ children }) {
       throw new Error('Login required to become a teacher.')
     }
 
+    const idempotencyKey = crypto.randomUUID();
+
     const responseBody = await requestAuthorized('/subscriptions/upgrade', token, {
       method: 'POST',
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
       body: {
         plan,
         billingCycle,
