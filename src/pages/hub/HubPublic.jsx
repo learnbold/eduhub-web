@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Footer from '../../components/Footer'
 import Navbar from '../../components/Navbar'
 import VideoPlayer from '../../components/VideoPlayer'
-import { fetchPublicHubPage, formatBatchPrice, formatPrice } from '../../utils/dashboardApi'
+import { formatBatchPrice, formatPrice } from '../../utils/dashboardApi'
+import { usePublicHub } from '../../hooks/useQueries'
 import './HubPublic.css'
 
 const TAB_IDS = ['home', 'batches', 'courses', 'videos', 'notes']
@@ -47,61 +48,21 @@ function HubPublic() {
   const [searchParams, setSearchParams] = useSearchParams()
   const identityRef = useRef(null)
 
-  const [hubPage, setHubPage] = useState({
+  const { data: hubPageData, isLoading: loading, error: fetchError } = usePublicHub(slug)
+  const error = fetchError?.message || ''
+  
+  const hubPage = hubPageData || {
     hub: null,
     batches: [],
     courses: [],
     videos: [],
-  })
+  }
+
   const [selectedVideoId, setSelectedVideoId] = useState('')
   const [searchValue, setSearchValue] = useState(searchParams.get('q') || '')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [isCompactNavPinned, setIsCompactNavPinned] = useState(false)
 
   const activeTab = TAB_IDS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'home'
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    const loadHubPage = async () => {
-      try {
-        setLoading(true)
-        setError('')
-
-        const payload = await fetchPublicHubPage(slug, controller.signal)
-
-        if (controller.signal.aborted) {
-          return
-        }
-
-        setHubPage({
-          hub: payload?.hub || null,
-          batches: Array.isArray(payload?.batches) ? payload.batches : [],
-          courses: Array.isArray(payload?.courses) ? payload.courses : [],
-          videos: Array.isArray(payload?.videos) ? payload.videos : [],
-        })
-      } catch (loadError) {
-        if (!controller.signal.aborted) {
-          setHubPage({
-            hub: null,
-            batches: [],
-            courses: [],
-            videos: [],
-          })
-          setError(loadError.message || 'Failed to load this public hub.')
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadHubPage()
-
-    return () => controller.abort()
-  }, [slug])
 
   useEffect(() => {
     setSearchValue(searchParams.get('q') || '')

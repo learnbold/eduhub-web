@@ -5,7 +5,7 @@ import EnrollCard from '../components/EnrollCard'
 import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../context/AuthContext'
-import { fetchPublicCourseBySlug } from '../utils/dashboardApi'
+import { usePublicCourse } from '../hooks/useQueries'
 import './Course.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -54,39 +54,13 @@ function Course() {
   const { token } = useAuth()
   const routeCourse = location.state?.course ?? null
 
-  const [course, setCourse] = useState(() => routeCourse)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { data: course, isLoading: loading, error: fetchError } = usePublicCourse(slug, {
+    initialData: routeCourse ? routeCourse : undefined
+  })
+  
+  const error = fetchError?.message || ''
   const [isEnrolling, setIsEnrolling] = useState(false)
   const [enrollError, setEnrollError] = useState('')
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setCourse(routeCourse)
-
-    const fetchCourse = async () => {
-      try {
-        setLoading(true)
-        setError('')
-
-        const data = await fetchPublicCourseBySlug(slug, controller.signal)
-        setCourse(data)
-      } catch (fetchError) {
-        if (fetchError.name !== 'AbortError') {
-          setCourse(null)
-          setError(fetchError.message || 'Failed to load course details. Please try again.')
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    fetchCourse()
-
-    return () => controller.abort()
-  }, [routeCourse, slug])
 
   const handleEnroll = async () => {
     if (!course || isEnrolling) {

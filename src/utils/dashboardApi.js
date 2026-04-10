@@ -232,6 +232,26 @@ export const normalizeVideo = (video) => {
     hlsUrl: normalizedHlsUrl,
     url: video.url || normalizedHlsUrl || video.videoUrl || '',
     status: video.status || 'uploading',
+    views: Number(video.views || 0),
+    likesCount: Number(video.likesCount || 0),
+  }
+}
+
+export const normalizeComment = (comment) => {
+  if (!comment) {
+    return null
+  }
+
+  const userId =
+    comment.userId && typeof comment.userId === 'object'
+      ? normalizeMember(comment.userId)
+      : comment.userId || ''
+
+  return {
+    ...comment,
+    _id: comment._id || comment.id || '',
+    userId,
+    text: comment.text || '',
   }
 }
 
@@ -677,4 +697,57 @@ export const processVideo = (token, videoId) =>
       idempotencyKey: buildIdempotencyKey(`process-${videoId}`),
     },
     'Failed to start video processing.'
+  )
+
+export const incrementVideoView = (videoId) =>
+  request(`/videos/${videoId}/view`, { method: 'POST' }, 'Failed to record video view.')
+
+export const toggleVideoLike = (token, videoId) =>
+  request(
+    `/videos/${videoId}/like`,
+    {
+      method: 'POST',
+      token,
+    },
+    'Failed to update like.'
+  )
+
+export const fetchVideoComments = (videoId, page = 1, signal) =>
+  request(
+    `/videos/${videoId}/comments?page=${page}`,
+    {
+      signal,
+    },
+    'Failed to load comments.'
+  ).then((data) => (Array.isArray(data) ? data.map(normalizeComment).filter(Boolean) : []))
+
+export const addVideoComment = (token, videoId, text) =>
+  request(
+    `/videos/${videoId}/comments`,
+    {
+      method: 'POST',
+      token,
+      body: { text },
+    },
+    'Failed to post comment.'
+  ).then(normalizeComment)
+
+export const deleteVideoComment = (token, commentId) =>
+  request(
+    `/comments/${commentId}`,
+    {
+      method: 'DELETE',
+      token,
+    },
+    'Failed to delete comment.'
+  )
+
+export const fetchVideoStatus = (token, videoId, signal) =>
+  request(
+    `/videos/${videoId}/status`,
+    {
+      token,
+      signal,
+    },
+    'Failed to load video status.'
   )

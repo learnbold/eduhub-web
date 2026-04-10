@@ -110,6 +110,7 @@ function CoursePlayer() {
   const currentPlaybackVideo = currentLesson
     ? {
         ...currentLesson.video,
+        _id: currentLesson.video?._id || currentLesson.videoId || '',
         title: currentLesson.title,
         order: currentLessonIndex + 1,
         url: getLessonVideoUrl(currentLesson),

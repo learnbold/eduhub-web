@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
+import { fetchCourses } from '../hooks/useQueries'
 import './Navbar.css'
 
 const CATEGORIES = ['Development', 'Design', 'Business', 'Marketing', 'Data Science', 'Programming', 'Medical']
@@ -8,9 +10,19 @@ const CATEGORIES = ['Development', 'Design', 'Business', 'Marketing', 'Data Scie
 function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { hub, isAuthenticated, isHubLoading, logout, user } = useAuth()
   const [isExploreOpen, setIsExploreOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  
+  const handleNavigateHome = async (e) => {
+    if (e) e.preventDefault()
+    await queryClient.prefetchQuery({
+      queryKey: ['courses'],
+      queryFn: fetchCourses,
+    })
+    navigate('/')
+  }
   
   const displayName = user?.preferredName || user?.firstName || user?.name || user?.username
   const isTeacher = user?.role === 'teacher'
@@ -25,14 +37,14 @@ function Navbar() {
     <header className="navbar">
       <div className="navbar__inner">
         <div className="navbar__left">
-          <Link className="navbar__brand" to="/" aria-label="Sparklass home">
+          <a className="navbar__brand" href="/" onClick={handleNavigateHome} aria-label="Sparklass home">
             <span className="navbar__brand-mark">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="#ffffff" stroke="none"/>
               </svg>
             </span>
             <span>Sparklass</span>
-          </Link>
+          </a>
 
           <div className="navbar__explore desktop-only" onMouseLeave={() => setIsExploreOpen(false)}>
             <button 
