@@ -42,7 +42,7 @@ const getCommentAuthor = (comment) => {
   return user.displayName || user.preferredName || [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.username || 'Sparklass Member'
 }
 
-function VideoPlayer({ video, onEnded }) {
+function VideoPlayer({ video, onEnded, showHeader = true, showComments = true, autoPlay = true }) {
   const { token, user } = useAuth()
   const videoRef = useRef(null)
   const viewedVideoIdRef = useRef('')
@@ -67,7 +67,7 @@ function VideoPlayer({ video, onEnded }) {
     const views = Number(viewsCount || 0).toLocaleString()
     const likes = Number(likesCount || 0).toLocaleString()
 
-    return `${views} view${Number(viewsCount || 0) === 1 ? '' : 's'} · ${likes} like${Number(likesCount || 0) === 1 ? '' : 's'}`
+    return `${views} view${Number(viewsCount || 0) === 1 ? '' : 's'} - ${likes} like${Number(likesCount || 0) === 1 ? '' : 's'}`
   }, [likesCount, viewsCount])
 
   useEffect(() => {
@@ -128,13 +128,13 @@ function VideoPlayer({ video, onEnded }) {
   useEffect(() => {
     setLiked(false)
     setLikesCount(Number(video?.likesCount || 0))
-    setViewsCount(Number(video?.views || 0))
+    setViewsCount(Number(video?.viewsCount ?? video?.views ?? 0))
     setStatus(video?.status || (video?.url || video?.hlsUrl || video?.videoUrl ? 'ready' : 'processing'))
     setComments([])
     setLoadingComments(false)
     setCommentText('')
     setCommentError('')
-  }, [videoId, video?.hlsUrl, video?.likesCount, video?.status, video?.url, video?.videoUrl, video?.views])
+  }, [videoId, video?.hlsUrl, video?.likesCount, video?.status, video?.url, video?.videoUrl, video?.views, video?.viewsCount])
 
   useEffect(() => {
     if (!videoId) return
@@ -157,7 +157,7 @@ function VideoPlayer({ video, onEnded }) {
   }, [videoId])
 
   useEffect(() => {
-    if (!videoId) return
+    if (!videoId || !showComments) return
 
     const controller = new AbortController()
 
@@ -178,7 +178,7 @@ function VideoPlayer({ video, onEnded }) {
     fetchComments()
 
     return () => controller.abort()
-  }, [videoId])
+  }, [showComments, videoId])
 
   useEffect(() => {
     if (!token || !videoId) return
@@ -287,39 +287,44 @@ function VideoPlayer({ video, onEnded }) {
 
   return (
     <section className="video-player">
-      <div className="video-player__header">
-        <div>
-          <p className="video-player__eyebrow">{eyebrow}</p>
-          <h2>{video.title}</h2>
-          <div className="video-player__actions">
-            <span className="video-player__metric">{engagementLabel}</span>
-            <button
-              type="button"
-              className={`video-player__like ${liked ? 'liked is-liked' : ''}`}
-              disabled={!token || liking}
-              onClick={handleLike}
-            >
-              {liked ? 'Liked' : 'Like'} {Number(likesCount || 0).toLocaleString()}
-            </button>
+      {showHeader ? (
+        <div className="video-player__header">
+          <div>
+            <p className="video-player__eyebrow">{eyebrow}</p>
+            <h2>{video.title}</h2>
+            <div className="video-player__actions">
+              <span className="video-player__metric">{engagementLabel}</span>
+              <button
+                type="button"
+                className={`video-player__like ${liked ? 'liked is-liked' : ''}`}
+                disabled={!token || liking}
+                onClick={handleLike}
+              >
+                {liked ? 'Liked' : 'Like'} {Number(likesCount || 0).toLocaleString()}
+              </button>
+            </div>
           </div>
+          <span className={`video-player__status video-player__status--${displayedStatus} ${!status ? 'hidden' : ''}`}>
+            {displayedStatusLabel}
+          </span>
         </div>
-        <span className={`video-player__status video-player__status--${displayedStatus} ${!status ? 'hidden' : ''}`}>
-          {displayedStatusLabel}
-        </span>
-      </div>
+      ) : null}
 
-      <div className="video-player__surface" key={`${video.order}-${video.title}`}>
+      <div
+        className={showHeader ? 'video-player__surface' : 'video-player__surface video-player__surface--standalone'}
+        key={`${video.order}-${video.title}`}
+      >
         <video
           ref={videoRef}
           className="video-player__element"
           controls
           playsInline
-          autoPlay
+          autoPlay={autoPlay}
           onEnded={onEnded}
         />
       </div>
 
-      {videoId ? (
+      {showComments && videoId ? (
         <section className="video-player__comments">
           <div className="video-player__comments-header">
             <h3>Comments</h3>

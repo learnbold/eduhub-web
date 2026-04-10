@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Footer from '../../components/Footer'
 import Navbar from '../../components/Navbar'
 import VideoPlayer from '../../components/VideoPlayer'
@@ -65,6 +65,7 @@ function HubPublic() {
   const activeTab = TAB_IDS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'home'
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchValue(searchParams.get('q') || '')
   }, [searchParams])
 
@@ -114,6 +115,7 @@ function HubPublic() {
 
   useEffect(() => {
     if (selectedVideoId && !selectedVideo) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedVideoId('')
     }
   }, [selectedVideo, selectedVideoId])
@@ -133,7 +135,6 @@ function HubPublic() {
       .slice(0, 8)
   }, [filteredVideos, selectedVideo])
 
-  const ownerName = hub?.ownerProfile?.displayName || hub?.name || 'Hub owner'
   const bioText = hub?.description || 'Teaching with clarity. Learning with purpose.'
   const noteCount = batches.reduce((total, batch) => total + Number(batch.noteCount || 0), 0)
   const studentCount = batches.reduce((total, batch) => total + Number(batch.studentCount || 0), 0)

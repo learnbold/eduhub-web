@@ -150,11 +150,17 @@ export const normalizeCourse = (course) => {
   return {
     ...course,
     _id: course._id || course.id || '',
-    hubId: course.hubId || '',
     price: Number(course.price || 0),
     isFree: course.isFree ?? Number(course.price || 0) === 0,
     category: course.category || 'Uncategorized',
     level: course.level || 'beginner',
+    hub: course.hub || null,
+    hubId:
+      typeof course.hubId === 'string'
+        ? course.hubId
+        : course.hubId?._id || course.hub?.id || course.hub?._id || course.hubId || '',
+    videoCount: Number(course.videoCount || course.videosCount || 0),
+    videosCount: Number(course.videosCount || course.videoCount || 0),
   }
 }
 
@@ -232,8 +238,15 @@ export const normalizeVideo = (video) => {
     hlsUrl: normalizedHlsUrl,
     url: video.url || normalizedHlsUrl || video.videoUrl || '',
     status: video.status || 'uploading',
-    views: Number(video.views || 0),
+    thumbnailUrl: video.thumbnailUrl || video.thumbnail || '',
+    thumbnail: video.thumbnail || video.thumbnailUrl || '',
+    price: video.price || 'Free',
+    hub: video.hub || null,
+    course: video.course || null,
+    views: Number(video.views ?? video.viewsCount ?? 0),
+    viewsCount: Number(video.viewsCount ?? video.views ?? 0),
     likesCount: Number(video.likesCount || 0),
+    commentsCount: Number(video.commentsCount || 0),
   }
 }
 
@@ -263,11 +276,13 @@ export const normalizeBatch = (batch) => {
   return {
     ...batch,
     _id: batch._id || batch.id || '',
+    id: batch.id || batch._id || '',
     hubId:
       typeof batch.hubId === 'string'
         ? batch.hubId
         : batch.hubId?._id || batch.hubId || '',
     price: Number(batch.price || 0),
+    hub: batch.hub || null,
     isPublished: batch.isPublished ?? true,
     planVisibility: batch.planVisibility || 'active',
     planArchivedAt: batch.planArchivedAt || null,
@@ -472,6 +487,22 @@ export const fetchPublicHubStandaloneVideos = (hubId, signal) =>
   request(`/videos/hub/${hubId}/standalone`, { signal }, 'Failed to load hub updates.').then((data) =>
     (Array.isArray(data) ? data : []).map(normalizeVideo).filter(Boolean)
   )
+
+export const fetchGlobalVideos = (signal, page = 1, limit = 12) =>
+  request(`/videos?page=${page}&limit=${limit}`, { signal }, 'Failed to load videos.').then((data) => {
+    const items = data && data.videos ? data.videos : Array.isArray(data) ? data : [];
+    return items.map(normalizeVideo).filter(Boolean);
+  })
+
+export const fetchGlobalVideoById = (videoId, signal) =>
+  request(`/videos/${videoId}`, { signal }, 'Failed to load video.').then(normalizeVideo)
+
+export const fetchExploreContent = (signal) =>
+  request('/explore', { signal }, 'Failed to load recommendations.').then((payload) => ({
+    videos: (Array.isArray(payload?.videos) ? payload.videos : []).map(normalizeVideo).filter(Boolean),
+    courses: (Array.isArray(payload?.courses) ? payload.courses : []).map(normalizeCourse).filter(Boolean),
+    batches: (Array.isArray(payload?.batches) ? payload.batches : []).map(normalizeBatch).filter(Boolean),
+  }))
 
 export const fetchHubTeam = (token, hubId, signal) =>
   request(`/hub/${hubId}/team`, { token, signal }, 'Failed to load hub team.').then((payload) => ({

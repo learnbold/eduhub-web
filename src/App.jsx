@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Player from './pages/Player'
 import Register from './pages/Register'
 import BecomeTeacher from './pages/BecomeTeacher'
+import WatchPage from './pages/WatchPage'
 import CoursePlayer from './pages/course/CoursePlayer'
 import DashboardHome from './pages/dashboard/DashboardHome'
 import BatchesList from './pages/dashboard/BatchesList'
@@ -31,6 +32,7 @@ function App() {
       <Route path="/" element={<Home />} />
       <Route path="/course/:slug" element={<Course />} />
       <Route path="/hub/:slug" element={<HubPublic />} />
+      <Route path="/watch/:videoId" element={<WatchPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/become-teacher" element={<BecomeTeacher />} />
