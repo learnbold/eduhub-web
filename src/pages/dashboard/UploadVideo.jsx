@@ -5,7 +5,6 @@ import {
   createVideo,
   fetchManagedHubCourses,
   getVideoFileType,
-  processVideo,
   requestVideoUploadUrl,
   uploadVideoFile,
 } from '../../utils/dashboardApi'
@@ -141,10 +140,7 @@ function UploadVideo() {
         r2Key,
         videoType: formValues.videoType,
       }
-      const video = await createVideo(token, videoPayload)
-
-      setSubmitStage('Starting video processing...')
-      await processVideo(token, video._id)
+      await createVideo(token, videoPayload)
 
       setSuccess(
         isStandalone
@@ -213,14 +209,7 @@ function UploadVideo() {
       {error ? <p className="dashboard-alert">{error}</p> : null}
       {success ? <p className="dashboard-success">{success}</p> : null}
       {submitStage ? (
-        <>
-          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-          <div className="dashboard-info dashboard-upload-status" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <p style={{ margin: 0 }}>{submitStage}</p>
-            {submitStage.includes('Uploading') && <progress value={undefined} style={{ flexGrow: 1 }} />}
-            {submitStage.includes('Processing') && <div className="spinner" style={{ border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid #fff', borderRadius: '50%', width: '1rem', height: '1rem', animation: 'spin 1s linear infinite' }}></div>}
-          </div>
-        </>
+        <p className="dashboard-info">{submitStage}</p>
       ) : null}
 
       {loading ? (

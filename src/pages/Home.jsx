@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
+import { fetchCourses, useCourses } from '../hooks/useQueries'
 import CourseCard from '../components/CourseCard'
 import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
@@ -8,7 +10,6 @@ import HubCard from '../components/HubCard'
 import { mockContinueLearning, mockFeaturedCourses, mockHubs } from '../utils/mockCourses'
 import './Home.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 const skeletonCards = Array.from({ length: 8 }, (_, index) => index)
 
 const CATEGORIES = ['All', 'Development', 'Design', 'Business', 'Marketing', 'Data Science', 'Programming', 'Medical']
@@ -16,46 +17,11 @@ const CATEGORIES = ['All', 'Development', 'Design', 'Business', 'Marketing', 'Da
 function Home() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
-  const [courses, setCourses] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  
+  const { data: courses = [], isLoading: loading, error: fetchError } = useCourses()
+  const error = fetchError?.message || ''
 
-  useEffect(() => {
-    const controller = new AbortController()
 
-    const fetchCourses = async () => {
-      try {
-        setLoading(true)
-        setError('')
-
-        const response = await fetch(`${API_BASE_URL}/courses`, {
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to load courses.')
-        }
-
-        const data = await response.json()
-        const nextCourses = Array.isArray(data) ? data : Array.isArray(data.courses) ? data.courses : []
-
-        setCourses(nextCourses)
-      } catch (fetchError) {
-        if (fetchError.name !== 'AbortError') {
-          setCourses([])
-          setError('Failed to load courses. Please try again.')
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    fetchCourses()
-
-    return () => controller.abort()
-  }, [])
 
   // If we have API courses, use them for featured (first 4). Otherwise fallback to mockFeaturedCourses.
   const featuredCourses = useMemo(() => {

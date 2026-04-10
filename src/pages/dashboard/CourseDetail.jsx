@@ -7,7 +7,6 @@ import {
   fetchManagedCourseVideos,
   formatPrice,
   publishCourse,
-  processVideo,
   requestVideoUploadUrl,
   getVideoFileType,
   uploadVideoFile,
@@ -148,7 +147,7 @@ function CourseDetail() {
         await uploadVideoFile(uploadUrl, file, fileType)
 
         setLessonUploadStage('Saving video record...')
-        const createdVideo = await createVideo(token, {
+        await createVideo(token, {
           title: lesson.title || file.name.replace(/\.[^.]+$/, ''),
           description: '',
           courseId: course._id,
@@ -157,9 +156,6 @@ function CourseDetail() {
           r2Key,
           videoType: 'course',
         })
-
-        setLessonUploadStage('Starting video processing...')
-        await processVideo(token, createdVideo._id)
 
         await Promise.all([refreshCourseOutline(), refreshManagedVideos()])
 
