@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchPublicCourseBySlug, fetchPublicHubPage } from '../utils/dashboardApi'
+import {
+  fetchExploreContent,
+  fetchGlobalVideoById,
+  fetchGlobalVideos,
+  fetchPublicCourseBySlug,
+  fetchPublicHubPage,
+} from '../utils/dashboardApi'
 import { useAuth } from '../context/AuthContext'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -15,6 +21,30 @@ export const useCourses = () => {
   return useQuery({
     queryKey: ['courses'],
     queryFn: fetchCourses,
+  })
+}
+
+export const useGlobalVideos = (page = 1) => {
+  return useQuery({
+    queryKey: ['videos', page],
+    queryFn: ({ signal }) => fetchGlobalVideos(signal, page, 12),
+    keepPreviousData: true,
+  })
+}
+
+export const useGlobalVideo = (videoId, options = {}) => {
+  return useQuery({
+    queryKey: ['video', videoId],
+    queryFn: ({ signal }) => fetchGlobalVideoById(videoId, signal),
+    enabled: !!videoId,
+    ...options,
+  })
+}
+
+export const useExploreContent = () => {
+  return useQuery({
+    queryKey: ['explore'],
+    queryFn: ({ signal }) => fetchExploreContent(signal),
   })
 }
 

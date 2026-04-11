@@ -4,10 +4,12 @@ const FALLBACK_THUMBNAIL =
   'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80'
 
 function CourseCard({ course, onClick, isContinueLearning = false }) {
-  // If price is missing or course is free, show Free. Otherwise show formatted price.
-  const displayPrice = course.isFree || !course.price ? 'Free' : `$${Number(course.price).toFixed(2)}`
-  const rating = course.rating || '4.8'
-  const studentsCount = course.studentsCount || Math.floor(Math.random() * 5000 + 1000)
+  const displayPrice = course.isFree || !course.price
+    ? 'Free'
+    : `${course.currency || 'INR'} ${Number(course.price).toLocaleString()}`
+  const hubName = course.hub?.name || course.instructor || 'Sparklass educator'
+  const videoCount = Number(course.videosCount || course.videoCount || 0)
+  const studentsCount = Number(course.studentsCount || 0)
 
   return (
     <article
@@ -16,7 +18,7 @@ function CourseCard({ course, onClick, isContinueLearning = false }) {
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          onClick()
+          onClick?.()
         }
       }}
       role="button"
@@ -46,7 +48,10 @@ function CourseCard({ course, onClick, isContinueLearning = false }) {
 
       <div className="course-card__body">
         <h3 title={course.title} className="course-card__title">{course.title}</h3>
-        <p className="course-card__instructor">{course.instructor || 'Top Educator'}</p>
+        <p className="course-card__instructor">{hubName}</p>
+        {course.description ? (
+          <p className="course-card__description">{course.description}</p>
+        ) : null}
 
         {isContinueLearning ? (
           <div className="course-card__progress-container">
@@ -60,14 +65,12 @@ function CourseCard({ course, onClick, isContinueLearning = false }) {
           </div>
         ) : (
           <div className="course-card__meta">
-            <span className="course-card__rating">
-              <svg viewBox="0 0 24 24" className="star-icon" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              {rating}
-            </span>
             <span className="course-card__students">
-              ({studentsCount.toLocaleString()} students)
+              {videoCount > 0
+                ? `${videoCount.toLocaleString()} video${videoCount === 1 ? '' : 's'}`
+                : studentsCount > 0
+                  ? `${studentsCount.toLocaleString()} students`
+                  : course.level || course.category || 'Course'}
             </span>
           </div>
         )}

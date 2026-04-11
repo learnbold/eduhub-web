@@ -1,13 +1,9 @@
-import { useMemo } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../context/AuthContext'
-import { fetchCourses, useCourses } from '../hooks/useQueries'
-import CourseCard from '../components/CourseCard'
+import { useGlobalVideos } from '../hooks/useQueries'
 import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
-import HubCard from '../components/HubCard'
-import { mockContinueLearning, mockFeaturedCourses, mockHubs } from '../utils/mockCourses'
+import VideoCard from '../components/VideoCard'
 import './Home.css'
 
 const skeletonCards = Array.from({ length: 8 }, (_, index) => index)
@@ -16,20 +12,13 @@ const CATEGORIES = ['All', 'Development', 'Design', 'Business', 'Marketing', 'Da
 
 function Home() {
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuth()
   
-  const { data: courses = [], isLoading: loading, error: fetchError } = useCourses()
-  const error = fetchError?.message || ''
+  const [page, setPage] = React.useState(1)
+  const [isSidebarExpanded, setIsSidebarExpanded] = React.useState(false)
+  const toggleSidebar = () => setIsSidebarExpanded((prev) => !prev)
 
-
-
-  // If we have API courses, use them for featured (first 4). Otherwise fallback to mockFeaturedCourses.
-  const featuredCourses = useMemo(() => {
-    if (courses.length > 0) {
-      return courses.slice(0, 4)
-    }
-    return mockFeaturedCourses.slice(0, 4) 
-  }, [courses])
+  const { data: videos = [], isLoading: videosLoading, isFetching: videosFetching, error: videosFetchError } = useGlobalVideos(page)
+  const videosError = videosFetchError?.message || ''
 
   return (
     <div className="home-dark-theme" id="top">
@@ -55,7 +44,7 @@ function Home() {
                   type="button"
                   className="hero-btn btn-primary"
                   onClick={() =>
-                    document.getElementById('popular-courses')?.scrollIntoView({ behavior: 'smooth' })
+                    document.getElementById('global-videos')?.scrollIntoView({ behavior: 'smooth' })
                   }
                 >
                   Explore
@@ -119,71 +108,55 @@ function Home() {
           </div>
         </div>
 
-        {/* CONTINUE LEARNING (IF LOGGED IN) */}
-        {isAuthenticated && mockContinueLearning.length > 0 && (
-          <section className="courses-section continue-learning-section">
-            <div className="courses-section__header">
-              <h2>Continue Learning</h2>
-            </div>
-            <div className="courses-grid__horizontal">
-              {mockContinueLearning.map((course) => (
-                <div key={course.id} className="course-card-wrapper horizontal">
-                  <CourseCard
-                    course={course}
-                    isContinueLearning={true}
-                    onClick={() => navigate(`/course/${course.slug || course.id}`, { state: { course } })}
-                  />
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* FEATURED COURSES */}
-        <section className="courses-section" id="featured-courses">
-          <div className="courses-section__header">
-            <h2>Featured Courses</h2>
-          </div>
-          <div className="courses-grid featured-grid">
-            {featuredCourses.map((course) => (
-              <CourseCard
-                key={course.slug || course.id}
-                course={course}
-                onClick={() => navigate(`/course/${course.slug || course.id}`, { state: { course } })}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* DISCOVER HUBS */}
-        <section className="courses-section hubs-section" id="discover-hubs">
-          <div className="courses-section__header">
-            <h2>Discover Hubs</h2>
-          </div>
-          <div className="courses-grid__horizontal hubs-grid">
-            {mockHubs.map((hub) => (
-              <div key={hub.id} className="hub-card-wrapper">
-                <HubCard hub={hub} />
+        {/* MAIN LAYOUT: SIDEBAR + FEED */}
+        <div className="home-main-layout">
+          <aside className={`home-sidebar ${isSidebarExpanded ? 'expanded' : 'collapsed'}`}>
+            <button className="sidebar-toggle-btn" onClick={toggleSidebar} aria-label="Toggle sidebar">
+              <svg viewBox="0 0 24 24" fill="none" width="24" height="24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+            <div className="sidebar-menu">
+              <div className="sidebar-item active">
+                <svg viewBox="0 0 24 24" fill="none" width="24" height="24" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span className="sidebar-text">Home</span>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="sidebar-item">
+                <svg viewBox="0 0 24 24" fill="none" width="24" height="24" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                  <polyline points="17 2 12 7 7 2"></polyline>
+                </svg>
+                <span className="sidebar-text">Subscriptions</span>
+              </div>
+              <div className="sidebar-item">
+                <svg viewBox="0 0 24 24" fill="none" width="24" height="24" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span className="sidebar-text">You</span>
+              </div>
+            </div>
+          </aside>
 
-        {/* ALL COURSES GRID */}
-        <section className="courses-section" id="popular-courses">
-          <div className="courses-section__header">
-            <h2>All Courses</h2>
+          <section className="courses-section" id="global-videos">
+            <div className="courses-section__header">
+            <h2>Latest Videos</h2>
             <div className="courses-section__status">
               <span className="courses-pill">
-                {courses.length ? `${courses.length} courses` : 'Browsing'}
+                {videos.length ? `${videos.length} videos` : 'Global feed'}
               </span>
             </div>
           </div>
 
-          {error ? <p className="courses-alert">{error}</p> : null}
+          {videosError ? <p className="courses-alert">{videosError}</p> : null}
 
-          {loading ? (
-            <div className="courses-grid" aria-label="Loading courses">
+          {videosLoading ? (
+            <div className="yt-grid" aria-label="Loading videos">
               {skeletonCards.map((card) => (
                 <div key={card} className="course-skeleton">
                   <div className="course-skeleton__media" />
@@ -193,26 +166,47 @@ function Home() {
                 </div>
               ))}
             </div>
-          ) : courses.length === 0 && featuredCourses.length === 0 ? (
+          ) : videos.length === 0 ? (
             <section className="courses-empty">
               <svg viewBox="0 0 24 24" className="courses-empty-icon" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" />
               </svg>
-              <h3>No courses available yet</h3>
-              <p>Check back soon to explore new structured learning content.</p>
+              <h3>No videos available yet</h3>
+              <p>Published videos from hubs will appear here once they are ready.</p>
             </section>
           ) : (
-            <div className="courses-grid">
-              {courses.map((course) => (
-                <CourseCard
-                  key={course.slug}
-                  course={course}
-                  onClick={() => navigate(`/course/${course.slug}`, { state: { course } })}
-                />
-              ))}
-            </div>
+            <>
+              <div className="yt-grid" style={{ opacity: videosFetching ? 0.5 : 1 }}>
+                {videos.map((video) => (
+                  <VideoCard
+                    key={video._id || video.id}
+                    video={video}
+                    onClick={() => navigate(`/watch/${video._id || video.id}`)}
+                  />
+                ))}
+              </div>
+              <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '2rem' }}>
+                <button 
+                  className="btn-secondary" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  Previous
+                </button>
+                <span style={{ alignSelf: 'center' }}>Page {page}</span>
+                <button 
+                  className="btn-secondary"
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={videos.length < 12}
+                >
+                  Next
+                </button>
+              </div>
+            </>
           )}
         </section>
+
+        </div>
       </main>
 
       <Footer />

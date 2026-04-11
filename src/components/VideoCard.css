@@ -1,0 +1,118 @@
+.video-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary, #ffffff);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.video-card:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-card, 0 12px 24px -4px rgba(0, 0, 0, 0.4));
+}
+
+.video-card:focus-visible {
+  outline: 2px solid var(--accent, #6366f1);
+  outline-offset: 4px;
+}
+
+.video-card__media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-hover, #1f2937);
+  border-radius: 12px;
+}
+
+.video-card__image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+
+.video-card:hover .video-card__image {
+  transform: scale(1.02);
+}
+
+.video-card__duration {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.video-card__price {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(2, 6, 23, 0.82);
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.video-card__price--free {
+  background: var(--success, #10b981);
+}
+
+.video-card__price--subscription {
+  background: #0ea5e9;
+}
+
+.video-card__body {
+  min-width: 0;
+  padding: 12px 0 0 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.video-card__body h3 {
+  color: var(--text-primary, #ffffff);
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.video-card__hub {
+  color: var(--text-secondary, #aaaaaa);
+  font-size: 13px;
+  font-weight: 400;
+  margin-bottom: 2px;
+}
+
+.video-card__stats {
+  display: flex;
+  color: var(--text-secondary, #aaaaaa);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.video-card__stats span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
