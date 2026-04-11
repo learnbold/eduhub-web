@@ -782,3 +782,24 @@ export const fetchVideoStatus = (token, videoId, signal) =>
     },
     'Failed to load video status.'
   )
+
+export const deleteBatch = (token, batchId) =>
+  request(
+    `/batches/${batchId}`,
+    { method: 'DELETE', token, headers: withIdempotency({}, 'batch-delete') },
+    'Failed to delete batch.'
+  )
+
+export const deleteCourse = (token, courseId) =>
+  request(
+    `/courses/${courseId}`,
+    { method: 'DELETE', token, headers: withIdempotency({}, 'course-delete') },
+    'Failed to delete course.'
+  )
+
+export const deleteVideo = (token, videoId) =>
+  request(
+    `/videos/${videoId}`,
+    { method: 'DELETE', token, headers: withIdempotency({}, 'video-delete') },
+    'Failed to delete video.'
+  )

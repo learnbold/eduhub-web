@@ -1,7 +1,37 @@
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { fetchManagedHubVideos } from '../../utils/dashboardApi'
+import { deleteVideo, fetchManagedHubVideos } from '../../utils/dashboardApi'
+
+const cardImageStyle = {
+  width: '100%',
+  height: '160px',
+  objectFit: 'cover',
+  backgroundColor: '#334155',
+}
+
+const cardThumbnailContainerStyle = {
+  margin: '-24px -24px 18px -24px',
+  borderRadius: '28px 28px 0 0',
+  overflow: 'hidden',
+  position: 'relative'
+}
+
+const actionIconsStyle = {
+  position: 'absolute',
+  top: '12px',
+  right: '12px',
+  display: 'flex',
+  gap: '8px',
+  opacity: 0,
+  transition: 'opacity 0.2s ease',
+}
+
+const cardHoverStyle = {
+  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+}
+
+const cardHoverClass = 'dashboard-video-card group'
 
 function HubVideos() {
   const { token } = useAuth()
@@ -46,6 +76,21 @@ function HubVideos() {
   const basePath = `/hub/${hub.slug}/dashboard`
   const standaloneVideos = videos.filter((video) => video.videoType === 'standalone')
   const courseVideos = videos.filter((video) => video.videoType !== 'standalone')
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this?")) return;
+    try {
+      await deleteVideo(token, id);
+      setVideos(prev => prev.filter(item => item._id !== id));
+    } catch (err) {
+      alert("Failed to delete video");
+    }
+  }
+
+  const handleEdit = (id) => {
+    // Placeholder edit behavior
+    alert(`Edit functionality for video ${id} is coming soon!`);
+  }
 
   return (
     <div className="dashboard-page">
@@ -97,15 +142,25 @@ function HubVideos() {
                 <p>Standalone videos are ideal for announcements, free lessons, and creator updates.</p>
               </div>
             ) : (
-              <div className="dashboard-grid dashboard-grid--videos">
+              <div className="dashboard-grid dashboard-grid--videos" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                 {standaloneVideos.map((video) => (
-                  <article key={video._id} className="dashboard-video-card">
+                  <article key={video._id} className="dashboard-video-card" style={cardHoverStyle} 
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.12)'; e.currentTarget.querySelector('.action-icons').style.opacity = '1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.08)'; e.currentTarget.querySelector('.action-icons').style.opacity = '0'; }}>
+                    
+                    <div style={cardThumbnailContainerStyle}>
+                      <img src={video.thumbnailUrl || 'https://via.placeholder.com/600x400?text=Video'} alt={video.title} style={cardImageStyle} />
+                      <div className="action-icons" style={actionIconsStyle}>
+                        <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
+                        <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
+                      </div>
+                    </div>
+
                     <div className="dashboard-video-card__header">
                       <div>
                         <h3>{video.title}</h3>
                         <p className="dashboard-muted">{video.description || 'Hub update video.'}</p>
                       </div>
-                      <span className="dashboard-pill dashboard-pill--neutral">Standalone</span>
                     </div>
                     <div className="dashboard-video-card__meta">
                       <div>
@@ -113,18 +168,12 @@ function HubVideos() {
                         <strong>{video.status}</strong>
                       </div>
                       <div>
-                        <span>Published To</span>
-                        <strong>Public Hub Feed</strong>
+                        <span>Views</span>
+                        <strong>{video.viewsCount || 0}</strong>
                       </div>
                       <div>
-                        <span>Created</span>
-                        <strong>
-                          {video.createdAt ? new Date(video.createdAt).toLocaleDateString() : 'Recently'}
-                        </strong>
-                      </div>
-                      <div>
-                        <span>Batches</span>
-                        <strong>{video.batchCount || 0}</strong>
+                        <span>Comments</span>
+                        <strong>{video.commentsCount || 0}</strong>
                       </div>
                     </div>
                     {video.batchSummaries?.length ? (
@@ -156,32 +205,38 @@ function HubVideos() {
                 <p>Course lessons will appear here once your team starts uploading them.</p>
               </div>
             ) : (
-              <div className="dashboard-grid dashboard-grid--videos">
+              <div className="dashboard-grid dashboard-grid--videos" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                 {courseVideos.map((video) => (
-                  <article key={video._id} className="dashboard-video-card">
+                  <article key={video._id} className="dashboard-video-card" style={cardHoverStyle} 
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.12)'; e.currentTarget.querySelector('.action-icons').style.opacity = '1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.08)'; e.currentTarget.querySelector('.action-icons').style.opacity = '0'; }}>
+                    
+                    <div style={cardThumbnailContainerStyle}>
+                      <img src={video.thumbnailUrl || 'https://via.placeholder.com/600x400?text=Video'} alt={video.title} style={cardImageStyle} />
+                      <div className="action-icons" style={actionIconsStyle}>
+                        <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
+                        <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
+                      </div>
+                    </div>
+
                     <div className="dashboard-video-card__header">
                       <div>
                         <h3>{video.title}</h3>
                         <p className="dashboard-muted">{video.description || 'Course lesson video.'}</p>
                       </div>
-                      <span className="dashboard-pill dashboard-pill--warning">Course</span>
                     </div>
                     <div className="dashboard-video-card__meta">
-                      <div>
-                        <span>Course</span>
-                        <strong>{video.courseId?.title || 'Attached course'}</strong>
-                      </div>
                       <div>
                         <span>Status</span>
                         <strong>{video.status}</strong>
                       </div>
                       <div>
-                        <span>Lesson Order</span>
-                        <strong>{video.order || 'Pending'}</strong>
+                        <span>Views</span>
+                        <strong>{video.viewsCount || 0}</strong>
                       </div>
                       <div>
-                        <span>Batches</span>
-                        <strong>{video.batchCount || 0}</strong>
+                        <span>Comments</span>
+                        <strong>{video.commentsCount || 0}</strong>
                       </div>
                     </div>
                     {video.batchSummaries?.length ? (
