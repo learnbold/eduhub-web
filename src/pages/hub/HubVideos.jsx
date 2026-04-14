@@ -1,44 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { DashboardCard, DashboardModal, EditPlaceholderModal } from '../../components/dashboard/DashboardCards'
 import { useAuth } from '../../context/AuthContext'
 import { deleteVideo, fetchManagedHubVideos } from '../../utils/dashboardApi'
 
-const cardImageStyle = {
-  width: '100%',
-  height: '160px',
-  objectFit: 'cover',
-  backgroundColor: '#334155',
-}
-
-const cardThumbnailContainerStyle = {
-  margin: '-24px -24px 18px -24px',
-  borderRadius: '28px 28px 0 0',
-  overflow: 'hidden',
-  position: 'relative'
-}
-
-const actionIconsStyle = {
-  position: 'absolute',
-  top: '12px',
-  right: '12px',
-  display: 'flex',
-  gap: '8px',
-  opacity: 0,
-  transition: 'opacity 0.2s ease',
-}
-
-const cardHoverStyle = {
-  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-}
-
-const cardHoverClass = 'dashboard-video-card group'
-
 function HubVideos() {
+  const navigate = useNavigate()
   const { token } = useAuth()
   const { hub } = useOutletContext()
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [videoToDelete, setVideoToDelete] = useState(null)
+  const [deletingVideoId, setDeletingVideoId] = useState('')
+  const [videoToEdit, setVideoToEdit] = useState(null)
 
   useEffect(() => {
     if (!hub?._id) {
@@ -77,19 +53,83 @@ function HubVideos() {
   const standaloneVideos = videos.filter((video) => video.videoType === 'standalone')
   const courseVideos = videos.filter((video) => video.videoType !== 'standalone')
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this?")) return;
+  const handleDeleteVideo = async () => {
+    if (!videoToDelete?._id) {
+      return
+    }
+
     try {
-      await deleteVideo(token, id);
-      setVideos(prev => prev.filter(item => item._id !== id));
-    } catch (err) {
-      alert("Failed to delete video");
+      setDeletingVideoId(videoToDelete._id)
+      setError('')
+      setSuccess('')
+      await deleteVideo(token, videoToDelete._id)
+      setVideos((current) => current.filter((video) => video._id !== videoToDelete._id))
+      setVideoToDelete(null)
+      setSuccess(`"${videoToDelete.title}" was deleted.`)
+    } catch {
+      setError('Failed to delete')
+    } finally {
+      setDeletingVideoId('')
     }
   }
 
-  const handleEdit = (id) => {
-    // Placeholder edit behavior
-    alert(`Edit functionality for video ${id} is coming soon!`);
+  const renderVideoGrid = (items, emptyTitle, emptyBody) => {
+    if (items.length === 0) {
+      return (
+        <div className="dashboard-empty">
+          <h3>{emptyTitle}</h3>
+          <p>{emptyBody}</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="dashboard-grid dashboard-grid--cards">
+        {items.map((video) => (
+          <DashboardCard
+            key={video._id}
+            title={video.title}
+            description={video.description || (video.videoType === 'standalone' ? 'Hub update video.' : 'Course lesson video.')}
+            thumbnail={video.thumbnailUrl || video.thumbnail}
+            eyebrow={video.videoType === 'standalone' ? 'Standalone' : 'Course video'}
+            onOpen={() => navigate(`/watch/${video._id}`)}
+            onEdit={() => setVideoToEdit(video)}
+            onDelete={() => setVideoToDelete(video)}
+            badges={[
+              <span
+                key="status"
+                className={
+                  video.status === 'ready'
+                    ? 'dashboard-pill dashboard-pill--success'
+                    : 'dashboard-pill dashboard-pill--warning'
+                }
+              >
+                {video.status}
+              </span>,
+            ]}
+            meta={[
+              { label: 'Views', value: video.viewsCount || 0 },
+              { label: 'Comments', value: video.commentsCount || 0 },
+              { label: 'Status', value: video.status },
+            ]}
+          >
+            {video.course?.title ? (
+              <p className="dashboard-muted">Course: {video.course.title}</p>
+            ) : null}
+
+            {video.batchSummaries?.length ? (
+              <div className="dashboard-pill-row">
+                {video.batchSummaries.map((batch) => (
+                  <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
+                    {batch.title}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </DashboardCard>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -116,6 +156,7 @@ function HubVideos() {
       </section>
 
       {error ? <p className="dashboard-alert">{error}</p> : null}
+      {success ? <p className="dashboard-success">{success}</p> : null}
 
       {loading ? (
         <section className="dashboard-panel">
@@ -128,7 +169,7 @@ function HubVideos() {
         </section>
       ) : (
         <>
-          <section className="dashboard-panel">
+          <section className="dashboard-card-section">
             <div className="dashboard-page__header">
               <div>
                 <p className="dashboard-section-kicker">Standalone Feed</p>
@@ -136,62 +177,14 @@ function HubVideos() {
               </div>
             </div>
 
-            {standaloneVideos.length === 0 ? (
-              <div className="dashboard-empty">
-                <h3>No standalone updates yet</h3>
-                <p>Standalone videos are ideal for announcements, free lessons, and creator updates.</p>
-              </div>
-            ) : (
-              <div className="dashboard-grid dashboard-grid--videos" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-                {standaloneVideos.map((video) => (
-                  <article key={video._id} className="dashboard-video-card" style={cardHoverStyle} 
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.12)'; e.currentTarget.querySelector('.action-icons').style.opacity = '1'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.08)'; e.currentTarget.querySelector('.action-icons').style.opacity = '0'; }}>
-                    
-                    <div style={cardThumbnailContainerStyle}>
-                      <img src={video.thumbnailUrl || 'https://via.placeholder.com/600x400?text=Video'} alt={video.title} style={cardImageStyle} />
-                      <div className="action-icons" style={actionIconsStyle}>
-                        <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
-                        <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
-                      </div>
-                    </div>
-
-                    <div className="dashboard-video-card__header">
-                      <div>
-                        <h3>{video.title}</h3>
-                        <p className="dashboard-muted">{video.description || 'Hub update video.'}</p>
-                      </div>
-                    </div>
-                    <div className="dashboard-video-card__meta">
-                      <div>
-                        <span>Status</span>
-                        <strong>{video.status}</strong>
-                      </div>
-                      <div>
-                        <span>Views</span>
-                        <strong>{video.viewsCount || 0}</strong>
-                      </div>
-                      <div>
-                        <span>Comments</span>
-                        <strong>{video.commentsCount || 0}</strong>
-                      </div>
-                    </div>
-                    {video.batchSummaries?.length ? (
-                      <div className="dashboard-pill-row">
-                        {video.batchSummaries.map((batch) => (
-                          <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
-                            {batch.title}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
+            {renderVideoGrid(
+              standaloneVideos,
+              'No standalone updates yet',
+              'Standalone videos are ideal for announcements, free lessons, and creator updates.'
             )}
           </section>
 
-          <section className="dashboard-panel">
+          <section className="dashboard-card-section">
             <div className="dashboard-page__header">
               <div>
                 <p className="dashboard-section-kicker">Course Library</p>
@@ -199,62 +192,36 @@ function HubVideos() {
               </div>
             </div>
 
-            {courseVideos.length === 0 ? (
-              <div className="dashboard-empty">
-                <h3>No course videos yet</h3>
-                <p>Course lessons will appear here once your team starts uploading them.</p>
-              </div>
-            ) : (
-              <div className="dashboard-grid dashboard-grid--videos" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-                {courseVideos.map((video) => (
-                  <article key={video._id} className="dashboard-video-card" style={cardHoverStyle} 
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.12)'; e.currentTarget.querySelector('.action-icons').style.opacity = '1'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.08)'; e.currentTarget.querySelector('.action-icons').style.opacity = '0'; }}>
-                    
-                    <div style={cardThumbnailContainerStyle}>
-                      <img src={video.thumbnailUrl || 'https://via.placeholder.com/600x400?text=Video'} alt={video.title} style={cardImageStyle} />
-                      <div className="action-icons" style={actionIconsStyle}>
-                        <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
-                        <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
-                      </div>
-                    </div>
-
-                    <div className="dashboard-video-card__header">
-                      <div>
-                        <h3>{video.title}</h3>
-                        <p className="dashboard-muted">{video.description || 'Course lesson video.'}</p>
-                      </div>
-                    </div>
-                    <div className="dashboard-video-card__meta">
-                      <div>
-                        <span>Status</span>
-                        <strong>{video.status}</strong>
-                      </div>
-                      <div>
-                        <span>Views</span>
-                        <strong>{video.viewsCount || 0}</strong>
-                      </div>
-                      <div>
-                        <span>Comments</span>
-                        <strong>{video.commentsCount || 0}</strong>
-                      </div>
-                    </div>
-                    {video.batchSummaries?.length ? (
-                      <div className="dashboard-pill-row">
-                        {video.batchSummaries.map((batch) => (
-                          <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
-                            {batch.title}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
+            {renderVideoGrid(
+              courseVideos,
+              'No course videos yet',
+              'Course lessons will appear here once your team starts uploading them.'
             )}
           </section>
         </>
       )}
+
+      {videoToDelete ? (
+        <DashboardModal
+          title="Delete video"
+          confirmLabel="Delete"
+          variant="danger"
+          busy={deletingVideoId === videoToDelete._id}
+          onCancel={() => setVideoToDelete(null)}
+          onConfirm={handleDeleteVideo}
+        >
+          <p>Are you sure you want to delete this?</p>
+        </DashboardModal>
+      ) : null}
+
+      {videoToEdit ? (
+        <EditPlaceholderModal
+          itemType="video"
+          itemName={videoToEdit.title}
+          openTo={`/watch/${videoToEdit._id}`}
+          onClose={() => setVideoToEdit(null)}
+        />
+      ) : null}
     </div>
   )
 }
