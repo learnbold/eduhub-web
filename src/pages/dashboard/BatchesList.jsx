@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { DashboardCard, DashboardModal, EditPlaceholderModal } from '../../components/dashboard/DashboardCards'
 import { useAuth } from '../../context/AuthContext'
 import {
   createBatch,
+  deleteBatch,
   fetchManagedHubBatches,
   formatBatchPrice,
 } from '../../utils/dashboardApi'
@@ -17,6 +19,7 @@ const initialBatchForm = {
 }
 
 function BatchesList() {
+  const navigate = useNavigate()
   const { token } = useAuth()
   const { hub } = useOutletContext()
   const [batches, setBatches] = useState([])
@@ -26,6 +29,9 @@ function BatchesList() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
   const [formValues, setFormValues] = useState(initialBatchForm)
+  const [batchToDelete, setBatchToDelete] = useState(null)
+  const [deletingBatchId, setDeletingBatchId] = useState('')
+  const [batchToEdit, setBatchToEdit] = useState(null)
 
   useEffect(() => {
     if (!hub?._id) {
@@ -70,6 +76,26 @@ function BatchesList() {
     (subscription?.effectivePlan === 'pro'
       ? 'Upgrade to Premium to create more batches'
       : 'Upgrade to Pro to create more batches')
+
+  const handleDeleteBatch = async () => {
+    if (!batchToDelete?._id) {
+      return
+    }
+
+    try {
+      setDeletingBatchId(batchToDelete._id)
+      setError('')
+      setSuccess('')
+      await deleteBatch(token, batchToDelete._id)
+      setBatches((current) => current.filter((batch) => batch._id !== batchToDelete._id))
+      setBatchToDelete(null)
+      setSuccess(`"${batchToDelete.title || batchToDelete.name}" was deleted.`)
+    } catch {
+      setError('Failed to delete')
+    } finally {
+      setDeletingBatchId('')
+    }
+  }
 
   return (
     <div className="dashboard-page">
@@ -273,43 +299,38 @@ function BatchesList() {
           </div>
         </section>
       ) : (
-        <section className="dashboard-grid dashboard-grid--courses">
+        <section className="dashboard-grid dashboard-grid--cards">
           {batches.map((batch) => (
-            <article key={batch._id} className="dashboard-course-card">
-              <div className="dashboard-course-card__header">
-                <div>
-                  <h3>{batch.title}</h3>
-                  <p className="dashboard-muted">
-                    {batch.description || 'Bundle courses, videos, notes, and students under one access unit.'}
-                  </p>
-                </div>
-
-                <div className="dashboard-pill-row">
+            <DashboardCard
+              key={batch._id}
+              title={batch.title || batch.name}
+              description={batch.description || 'Bundle courses, videos, notes, and students under one access unit.'}
+              thumbnail={batch.thumbnailUrl || batch.thumbnail}
+              eyebrow={formatBatchPrice(batch)}
+              onOpen={() => navigate(`${basePath}/batches/${batch._id}`)}
+              onEdit={() => setBatchToEdit(batch)}
+              onDelete={() => setBatchToDelete(batch)}
+              badges={[
+                <span key="status" className={batch.isPlanArchived ? 'dashboard-pill dashboard-pill--warning' : 'dashboard-pill dashboard-pill--success'}>
+                  {batch.isPlanArchived ? 'Archived by plan' : 'Active'}
+                </span>,
+              ]}
+              meta={[
+                { label: 'Students', value: batch.studentCount },
+                { label: 'Courses', value: batch.courseCount },
+                { label: 'Videos', value: batch.videoCount },
+                {
+                  label: 'Schedule',
+                  value: batch.startDate ? new Date(batch.startDate).toLocaleDateString() : 'Self-paced',
+                },
+              ]}
+            >
+              <div className="dashboard-pill-row">
                   <span className="dashboard-pill dashboard-pill--neutral">{formatBatchPrice(batch)}</span>
                   <span className="dashboard-pill dashboard-pill--success">{batch.courseCount} courses</span>
                   {batch.isPlanArchived ? (
                     <span className="dashboard-pill dashboard-pill--warning">Archived by plan</span>
                   ) : null}
-                </div>
-              </div>
-
-              <div className="dashboard-course-card__meta">
-                <div>
-                  <span>Students</span>
-                  <strong>{batch.studentCount}</strong>
-                </div>
-                <div>
-                  <span>Videos</span>
-                  <strong>{batch.videoCount}</strong>
-                </div>
-                <div>
-                  <span>Schedule</span>
-                  <strong>
-                    {batch.startDate
-                      ? new Date(batch.startDate).toLocaleDateString()
-                      : 'Self-paced'}
-                  </strong>
-                </div>
               </div>
 
               {batch.isPlanArchived ? (
@@ -318,7 +339,7 @@ function BatchesList() {
                 </p>
               ) : null}
 
-              <div className="dashboard-inline-actions">
+              <div className="dashboard-inline-actions" onClick={(event) => event.stopPropagation()}>
                 <Link to={`${basePath}/batches/${batch._id}`} className="dashboard-button">
                   Open Batch
                 </Link>
@@ -326,10 +347,32 @@ function BatchesList() {
                   Manage Courses
                 </Link>
               </div>
-            </article>
+            </DashboardCard>
           ))}
         </section>
       )}
+
+      {batchToDelete ? (
+        <DashboardModal
+          title="Delete batch"
+          confirmLabel="Delete"
+          variant="danger"
+          busy={deletingBatchId === batchToDelete._id}
+          onCancel={() => setBatchToDelete(null)}
+          onConfirm={handleDeleteBatch}
+        >
+          <p>Are you sure you want to delete this?</p>
+        </DashboardModal>
+      ) : null}
+
+      {batchToEdit ? (
+        <EditPlaceholderModal
+          itemType="batch"
+          itemName={batchToEdit.title || batchToEdit.name}
+          openTo={`${basePath}/batches/${batchToEdit._id}`}
+          onClose={() => setBatchToEdit(null)}
+        />
+      ) : null}
     </div>
   )
 }
