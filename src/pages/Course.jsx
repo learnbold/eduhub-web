@@ -6,9 +6,9 @@ import Footer from '../components/Footer'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../context/AuthContext'
 import { usePublicCourse } from '../hooks/useQueries'
+import { API_BASE_URL } from '../config/env'
 import './Course.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 const courseBadges = ['Self-paced access', 'Practical lessons', 'Premium learning path']
 
 const getShortDescription = (description) => {

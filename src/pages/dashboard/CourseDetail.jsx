@@ -2,14 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
-  createVideo,
   fetchManagedCourseById,
   fetchManagedCourseVideos,
   formatPrice,
   publishCourse,
-  requestVideoUploadUrl,
-  getVideoFileType,
-  uploadVideoFile,
   updateCourse,
   archiveCourse,
   fetchModulesByCourse,
@@ -18,6 +14,7 @@ import {
   createLesson,
   uploadCustomThumbnail,
 } from '../../utils/dashboardApi'
+import { startUpload } from '../../utils/uploadManager'
 
 function CourseDetail() {
   const { id = '' } = useParams()
@@ -61,7 +58,6 @@ function CourseDetail() {
   })
   const [creatingLesson, setCreatingLesson] = useState(false)
   const [uploadingLessonId, setUploadingLessonId] = useState('')
-  const [lessonUploadStage, setLessonUploadStage] = useState('')
   const [uploadingThumbnailId, setUploadingThumbnailId] = useState('')
   const lessonFileInputRefs = useRef({})
 
@@ -135,45 +131,31 @@ function CourseDetail() {
       try {
         setUploadingLessonId(lesson._id)
 
-        const fileType = getVideoFileType(file)
+        startUpload(
+          file,
+          {
+            title: lesson.title || file.name.replace(/\.[^.]+$/, ''),
+            description: '',
+            courseId: course._id,
+            lessonId: lesson._id,
+            hubId: hub._id,
+            videoType: 'course',
+          },
+          token
+        )
 
-        setLessonUploadStage('Preparing secure upload...')
-        const { uploadUrl, r2Key } = await requestVideoUploadUrl(token, {
-          courseId: course._id,
-          hubId: hub._id,
-          fileType,
-          videoType: 'course',
-        })
-
-        setLessonUploadStage('Uploading video file...')
-        await uploadVideoFile(uploadUrl, file, fileType)
-
-        setLessonUploadStage('Saving video record...')
-        await createVideo(token, {
-          title: lesson.title || file.name.replace(/\.[^.]+$/, ''),
-          description: '',
-          courseId: course._id,
-          lessonId: lesson._id,
-          hubId: hub._id,
-          r2Key,
-          videoType: 'course',
-        })
-
-        await Promise.all([refreshCourseOutline(), refreshManagedVideos()])
-
-        setSuccess(`Video attached to "${lesson.title || 'Untitled lesson'}". Processing has started.`)
+        setSuccess(`Upload started for "${lesson.title || 'Untitled lesson'}". You can keep working while it finishes in the background.`)
       } catch (uploadError) {
         setError(uploadError.message || 'Failed to upload lesson video.')
       } finally {
         setUploadingLessonId('')
-        setLessonUploadStage('')
         const input = lessonFileInputRefs.current[lesson._id]
         if (input) {
           input.value = ''
         }
       }
     },
-    [course?._id, hub?._id, refreshCourseOutline, refreshManagedVideos, token, uploadingLessonId]
+    [course?._id, hub?._id, token, uploadingLessonId]
   )
 
   const handleCustomThumbnailUpload = useCallback(async (videoId, file) => {
@@ -306,7 +288,7 @@ function CourseDetail() {
 
       {error ? <p className="dashboard-alert">{error}</p> : null}
       {success ? <p className="dashboard-success">{success}</p> : null}
-      {uploadingLessonId ? <p className="dashboard-info">{lessonUploadStage}</p> : null}
+      {uploadingLessonId ? <p className="dashboard-info">Starting lesson upload...</p> : null}
 
       <section className="dashboard-hero">
         <article className="dashboard-panel">

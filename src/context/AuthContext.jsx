@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { normalizeSubscription } from '../utils/dashboardApi'
+import { API_BASE_URL } from '../config/env'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 const TOKEN_STORAGE_KEY = 'token'
 const USER_STORAGE_KEY = 'auth_user'
 const HUB_STORAGE_KEY = 'teacher_hub'

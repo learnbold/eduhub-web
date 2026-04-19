@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import {
-  createVideo,
-  fetchManagedHubCourses,
-  getVideoFileType,
-  requestVideoUploadUrl,
-  uploadVideoFile,
-} from '../../utils/dashboardApi'
+import { fetchManagedHubCourses } from '../../utils/dashboardApi'
+import { startUpload } from '../../utils/uploadManager'
 
 const initialFormValues = {
   title: '',
@@ -22,6 +17,7 @@ function UploadVideo() {
   const [searchParams] = useSearchParams()
   const { token } = useAuth()
   const { hub } = useOutletContext()
+
   const routeCourse = location.state?.course || null
   const routeLesson = location.state?.lesson || null
   const routeBatch = location.state?.batch || null
@@ -34,9 +30,13 @@ function UploadVideo() {
   const [videoFile, setVideoFile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitStage, setSubmitStage] = useState('')
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const [uploadMessage, setUploadMessage] = useState('')
+
+  const basePath = `/hub/${hub.slug}/dashboard`
+  const backHref = selectedBatchId ? `${basePath}/batches/${selectedBatchId}` : `${basePath}/videos`
+  const selectedCourse = courses.find((course) => course._id === formValues.courseId) || routeCourse
+  const isStandalone = formValues.videoType === 'standalone'
 
   useEffect(() => {
     if (!hub?._id) {
@@ -48,7 +48,7 @@ function UploadVideo() {
     const loadCourses = async () => {
       try {
         setLoading(true)
-        setError('')
+        setSubmitError('')
 
         const nextCourses = await fetchManagedHubCourses(token, hub._id, controller.signal)
 
@@ -70,7 +70,7 @@ function UploadVideo() {
         }))
       } catch (loadError) {
         if (!controller.signal.aborted) {
-          setError(loadError.message || 'Failed to load courses for upload.')
+          setSubmitError(loadError.message || 'Failed to load courses for upload.')
           setCourses([])
         }
       } finally {
@@ -85,20 +85,32 @@ function UploadVideo() {
     return () => controller.abort()
   }, [hub?._id, routeCourse, routeLesson, searchParams, selectedLessonId, token])
 
-  const basePath = `/hub/${hub.slug}/dashboard`
-  const backHref = selectedBatchId ? `${basePath}/batches/${selectedBatchId}` : `${basePath}/videos`
-  const selectedCourse = courses.find((course) => course._id === formValues.courseId) || routeCourse
-  const isStandalone = formValues.videoType === 'standalone'
-
   const handleChange = (event) => {
     const { name, value } = event.target
     setFormValues((currentValues) => ({ ...currentValues, [name]: value }))
   }
 
   const handleFileChange = (event) => {
-    setVideoFile(event.target.files?.[0] || null)
-    setError('')
-    setSuccess('')
+    const file = event.target.files?.[0] || null
+
+    if (file) {
+      if (!file.type.startsWith('video/')) {
+        setSubmitError('Please select a valid video file.')
+        setVideoFile(null)
+        return
+      }
+
+      const maxSizeBytes = 2 * 1024 * 1024 * 1024
+      if (file.size > maxSizeBytes) {
+        setSubmitError('File is too large. Maximum supported size is 2GB.')
+        setVideoFile(null)
+        return
+      }
+    }
+
+    setVideoFile(file)
+    setSubmitError('')
+    setUploadMessage('')
   }
 
   const handleSubmit = async (event) => {
@@ -108,72 +120,44 @@ function UploadVideo() {
       return
     }
 
-    setError('')
-    setSuccess('')
+    setSubmitError('')
+    setUploadMessage('')
 
     try {
       setIsSubmitting(true)
 
-      const fileType = getVideoFileType(videoFile)
-
-      setSubmitStage('Preparing secure upload...')
-      const uploadPayload = {
-        courseId: isStandalone ? undefined : formValues.courseId,
-        hubId: isStandalone ? hub._id : undefined,
-        batchId: selectedBatchId || undefined,
-        fileType,
-        videoType: formValues.videoType,
-      }
-      const { uploadUrl, r2Key } = await requestVideoUploadUrl(token, uploadPayload)
-
-      setSubmitStage('Uploading video file...')
-      await uploadVideoFile(uploadUrl, videoFile, fileType)
-
-      setSubmitStage('Saving video record...')
-      const videoPayload = {
-        title: formValues.title,
-        description: formValues.description,
-        courseId: isStandalone ? undefined : formValues.courseId,
-        lessonId: isStandalone ? undefined : selectedLessonId || undefined,
-        hubId: isStandalone ? hub._id : undefined,
-        batchId: selectedBatchId || undefined,
-        r2Key,
-        videoType: formValues.videoType,
-      }
-      await createVideo(token, videoPayload)
-
-      setSuccess(
-        isStandalone
-          ? selectedBatchId
-            ? `Video uploaded and attached to ${batchLabel}. Processing has started.`
-            : 'Standalone hub video uploaded. Processing has started and it will appear on the public hub once ready.'
-          : selectedBatchId
-            ? `Course video uploaded and attached to ${batchLabel}. Processing has started.`
-            : 'Course video uploaded successfully. Processing has started and the lesson will appear once ready.'
+      startUpload(
+        videoFile,
+        {
+          title: formValues.title,
+          description: formValues.description,
+          courseId: isStandalone ? undefined : formValues.courseId,
+          videoType: formValues.videoType,
+          hubId: hub._id,
+          lessonId: selectedLessonId || undefined,
+          batchId: selectedBatchId || undefined,
+        },
+        token
       )
 
-      setTimeout(() => {
-        if (selectedBatchId && isStandalone) {
-          navigate(`${basePath}/batches/${selectedBatchId}`, {
-            state: { batch: routeBatch, activeTab: 'videos' },
-          })
-          return
-        }
+      setUploadMessage(
+        'Upload started in the background. You can leave this page now and keep working while the upload panel tracks progress.'
+      )
+      setVideoFile(null)
+      setFormValues((currentValues) => ({
+        ...initialFormValues,
+        videoType: currentValues.videoType,
+        courseId: isStandalone ? '' : currentValues.courseId,
+      }))
 
-        if (isStandalone) {
-          navigate(`${basePath}/videos`)
-          return
-        }
-
-        navigate(`${basePath}/courses/${formValues.courseId}`, {
-          state: { course: selectedCourse || null, batch: routeBatch },
-        })
-      }, 700)
-    } catch (submitError) {
-      setError(submitError.message || 'Failed to upload video.')
+      window.setTimeout(() => {
+        navigate(backHref)
+      }, 1200)
+    } catch (error) {
+      console.error('Failed to queue upload:', error)
+      setSubmitError(error.message || 'Failed to start upload. Please try again.')
     } finally {
       setIsSubmitting(false)
-      setSubmitStage('')
     }
   }
 
@@ -184,9 +168,7 @@ function UploadVideo() {
           <div>
             <p className="dashboard-section-kicker">Upload Video</p>
             <h2>Add a video to {hub.name}</h2>
-            <p>
-              Publish course lessons or standalone hub updates from the same creator workflow.
-            </p>
+            <p>Publish course lessons or standalone hub updates from the same creator workflow.</p>
             {selectedBatchId ? (
               <p>
                 New uploads from this screen will also attach to <strong>{batchLabel}</strong>.
@@ -206,17 +188,34 @@ function UploadVideo() {
         </div>
       </section>
 
-      {error ? <p className="dashboard-alert">{error}</p> : null}
-      {success ? <p className="dashboard-success">{success}</p> : null}
-      {submitStage ? (
-        <p className="dashboard-info">{submitStage}</p>
-      ) : null}
+      {submitError && (
+        <section className="dashboard-form-card" style={{ borderLeft: '4px solid #ef4444' }}>
+          <div style={{ padding: '1.5rem' }}>
+            <div style={{ marginBottom: '1rem' }}>
+              <p style={{ color: '#dc2626', fontWeight: '600', marginBottom: '0.5rem' }}>Error</p>
+              <p style={{ color: '#991b1b', fontSize: '0.95rem' }}>{submitError}</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {uploadMessage && (
+        <section className="dashboard-form-card" style={{ borderLeft: '4px solid #10b981' }}>
+          <div style={{ padding: '1.5rem' }}>
+            <p style={{ color: '#047857', fontWeight: '600', marginBottom: '0.5rem' }}>Upload Queued</p>
+            <p style={{ color: '#065f46', fontSize: '0.95rem' }}>{uploadMessage}</p>
+            <p style={{ color: '#999', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+              Your upload is now being handled outside this page, so navigation will not interrupt it.
+            </p>
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <section className="dashboard-panel">
           <p className="dashboard-muted">Loading hub content for upload...</p>
         </section>
-      ) : (
+      ) : !uploadMessage ? (
         <section className="dashboard-form-card">
           <form className="dashboard-form" onSubmit={handleSubmit}>
             <div className="dashboard-form__grid">
@@ -226,7 +225,7 @@ function UploadVideo() {
                   name="videoType"
                   value={formValues.videoType}
                   onChange={handleChange}
-                  disabled={Boolean(selectedLessonId)}
+                  disabled={Boolean(selectedLessonId) || isSubmitting}
                 >
                   <option value="course">Course Video</option>
                   <option value="standalone">Standalone Hub Update</option>
@@ -234,7 +233,7 @@ function UploadVideo() {
               </label>
 
               <label className="dashboard-field">
-                <span>Video Title</span>
+                <span>Video Title *</span>
                 <input
                   type="text"
                   name="title"
@@ -242,6 +241,7 @@ function UploadVideo() {
                   onChange={handleChange}
                   placeholder={isStandalone ? 'Weekly platform update' : 'Lesson 1: Introduction'}
                   required
+                  disabled={isSubmitting}
                 />
               </label>
             </div>
@@ -259,13 +259,13 @@ function UploadVideo() {
                 </div>
               ) : (
                 <label className="dashboard-field">
-                  <span>Course</span>
+                  <span>Course *</span>
                   <select
                     name="courseId"
                     value={formValues.courseId}
                     onChange={handleChange}
                     required={!isStandalone}
-                    disabled={Boolean(selectedLessonId)}
+                    disabled={Boolean(selectedLessonId) || isSubmitting}
                   >
                     <option value="" disabled>
                       Select a course
@@ -291,15 +291,16 @@ function UploadVideo() {
                     ? 'Describe the update, announcement, or free content.'
                     : 'Optional lesson summary for the course video.'
                 }
+                disabled={isSubmitting}
               />
             </label>
 
             <label className="dashboard-field">
-              <span>Video File</span>
-              <input type="file" accept="video/*" onChange={handleFileChange} required />
+              <span>Video File *</span>
+              <input type="file" accept="video/*" onChange={handleFileChange} required disabled={isSubmitting} />
               <small className="dashboard-file-meta">
-                Sparklass generates a signed upload URL first, stores the video, and then starts
-                processing.
+                Sparklass processes video files in HLS format with automatic thumbnail generation. Upload time
+                depends on file size. You can close this page after starting the upload.
               </small>
             </label>
 
@@ -324,10 +325,32 @@ function UploadVideo() {
                 className="dashboard-button"
                 disabled={isSubmitting || !videoFile || (!isStandalone && !formValues.courseId)}
               >
-                {isSubmitting ? 'Uploading...' : isStandalone ? 'Upload Hub Video' : 'Upload Video'}
+                {isSubmitting ? 'Starting upload...' : isStandalone ? 'Upload Hub Video' : 'Upload Video'}
               </button>
             </div>
           </form>
+        </section>
+      ) : null}
+
+      {!uploadMessage && (
+        <section className="dashboard-panel">
+          <div
+            style={{
+              padding: '1.5rem',
+              backgroundColor: '#f0f9ff',
+              borderRadius: '8px',
+              border: '1px solid #bfdbfe',
+            }}
+          >
+            <p style={{ fontWeight: '600', color: '#0c4a6e', marginBottom: '0.5rem' }}>Background Processing</p>
+            <p style={{ color: '#0c63e4', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+              Your upload will continue even if you leave this page. Watch the progress indicator in the bottom right
+              corner to track upload and processing status.
+            </p>
+            <p style={{ color: '#075985', fontSize: '0.9rem' }}>
+              Once processing finishes, the video will become available in your hub or course automatically.
+            </p>
+          </div>
         </section>
       )}
     </div>

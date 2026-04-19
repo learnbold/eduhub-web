@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import HubDashboardLayout from './components/dashboard/DashboardLayout'
+import UploadManager from './components/UploadManager'
 import Home from './pages/Home'
 import Course from './pages/Course'
 import Login from './pages/Login'
@@ -28,38 +29,43 @@ import './App.css'
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/course/:slug" element={<Course />} />
-      <Route path="/hub/:slug" element={<HubPublic />} />
-      <Route path="/watch/:videoId" element={<WatchPage />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/become-teacher" element={<BecomeTeacher />} />
-      <Route element={<ProtectedRoute />}>
-        <Route path="/course/:slug/learn" element={<CoursePlayer />} />
-        <Route path="/player/:courseId" element={<Player />} />
-      </Route>
-      <Route element={<ProtectedRoute requireTeacher />}>
-        <Route path="/dashboard" element={<HubDashboardRedirect />} />
-        <Route path="/hub/:slug/dashboard" element={<HubDashboardLayout />}>
-          <Route index element={<DashboardHome />} />
-          <Route path="batches" element={<BatchesList />} />
-          <Route path="batches/:id" element={<BatchDetail />} />
-          <Route path="courses" element={<CoursesList />} />
-          <Route path="courses/create" element={<CreateCourse />} />
-          <Route path="courses/:id" element={<CourseDetail />} />
-          <Route path="videos" element={<HubVideos />} />
-          <Route path="videos/upload" element={<UploadVideo />} />
-          <Route path="students" element={<HubStudents />} />
-          <Route path="teachers" element={<HubTeamManagement />} />
-          <Route path="admin" element={<HubAdminPanel />} />
-          <Route path="settings" element={<HubSettings />} />
-          <Route path="analytics" element={<HubAnalytics />} />
+    <>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/course/:slug" element={<Course />} />
+        <Route path="/hub/:slug" element={<HubPublic />} />
+        <Route path="/watch/:videoId" element={<WatchPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/become-teacher" element={<BecomeTeacher />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/course/:slug/learn" element={<CoursePlayer />} />
+          <Route path="/player/:courseId" element={<Player />} />
         </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route element={<ProtectedRoute requireTeacher />}>
+          <Route path="/dashboard" element={<HubDashboardRedirect />} />
+          <Route path="/hub/:slug/dashboard" element={<HubDashboardLayout />}>
+            <Route index element={<DashboardHome />} />
+            <Route path="batches" element={<BatchesList />} />
+            <Route path="batches/:id" element={<BatchDetail />} />
+            <Route path="courses" element={<CoursesList />} />
+            <Route path="courses/create" element={<CreateCourse />} />
+            <Route path="courses/:id" element={<CourseDetail />} />
+            <Route path="videos" element={<HubVideos />} />
+            <Route path="videos/upload" element={<UploadVideo />} />
+            <Route path="students" element={<HubStudents />} />
+            <Route path="teachers" element={<HubTeamManagement />} />
+            <Route path="admin" element={<HubAdminPanel />} />
+            <Route path="settings" element={<HubSettings />} />
+            <Route path="analytics" element={<HubAnalytics />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      {/* Global upload manager - appears on all pages */}
+      <UploadManager />
+    </>
   )
 }
 

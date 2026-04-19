@@ -1,4 +1,5 @@
-export const CDN_BASE_URL = (import.meta.env.VITE_CDN_URL || 'https://cf.sparklass.com').replace(/\/+$/, '')
+import { CDN_BASE_URL } from '../config/env'
+
 export const DEFAULT_THUMBNAIL = '/default-thumbnail.svg'
 
 const ABSOLUTE_ASSET_PATTERN = /^(?:https?:)?\/\//i
