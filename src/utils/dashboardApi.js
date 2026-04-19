@@ -1,4 +1,7 @@
+import { buildAssetUrl, getVideoThumbnailUrl } from './media'
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
+const VIDEO_API_ROOT = '/videos'
 const MUTATION_METHODS = new Set(['POST', 'PATCH', 'DELETE'])
 
 const buildIdempotencyKey = (keyPrefix = 'req') =>
@@ -224,9 +227,14 @@ export const normalizeVideo = (video) => {
     return null
   }
 
-  const normalizedHlsUrl = video.hlsUrl
-    ? (video.hlsUrl.startsWith('http') ? video.hlsUrl : `https://cf.sparklass.com/${video.hlsUrl}`)
-    : ''
+  const normalizedHlsUrl = buildAssetUrl(video.hlsUrl || '')
+  const normalizedSelectedThumbnail = buildAssetUrl(video.selectedThumbnail || '')
+  const normalizedThumbnailUrl = getVideoThumbnailUrl({
+    selectedThumbnailUrl: normalizedSelectedThumbnail,
+    selectedThumbnail: video.selectedThumbnail,
+    thumbnailUrl: video.thumbnailUrl,
+    thumbnail: video.thumbnail,
+  })
 
   return {
     ...video,
@@ -236,10 +244,12 @@ export const normalizeVideo = (video) => {
     duration: video.duration === undefined || video.duration === null ? null : Number(video.duration),
     r2Key: video.r2Key || '',
     hlsUrl: normalizedHlsUrl,
-    url: video.url || normalizedHlsUrl || video.videoUrl || '',
+    url: buildAssetUrl(video.url || video.videoUrl || '') || normalizedHlsUrl,
     status: video.status || 'uploading',
-    thumbnailUrl: video.thumbnailUrl || video.thumbnail || '',
-    thumbnail: video.thumbnail || video.thumbnailUrl || '',
+    selectedThumbnail: video.selectedThumbnail || '',
+    selectedThumbnailUrl: normalizedSelectedThumbnail || normalizedThumbnailUrl,
+    thumbnailUrl: normalizedThumbnailUrl,
+    thumbnail: normalizedThumbnailUrl,
     price: video.price || 'Free',
     hub: video.hub || null,
     course: video.course || null,
@@ -474,28 +484,28 @@ export const fetchManagedCourseById = (token, courseId, signal) =>
   )
 
 export const fetchManagedCourseVideos = (token, courseId, signal) =>
-  request(`/videos/course/${courseId}/manage`, { token, signal }, 'Failed to load course videos.').then(
+  request(`${VIDEO_API_ROOT}/course/${courseId}/manage`, { token, signal }, 'Failed to load course videos.').then(
     (data) => (Array.isArray(data) ? data : []).map(normalizeVideo).filter(Boolean)
   )
 
 export const fetchManagedHubVideos = (token, hubId, signal) =>
-  request(`/videos/hub/${hubId}/manage`, { token, signal }, 'Failed to load hub videos.').then(
+  request(`${VIDEO_API_ROOT}/hub/${hubId}/manage`, { token, signal }, 'Failed to load hub videos.').then(
     (data) => (Array.isArray(data) ? data : []).map(normalizeVideo).filter(Boolean)
   )
 
 export const fetchPublicHubStandaloneVideos = (hubId, signal) =>
-  request(`/videos/hub/${hubId}/standalone`, { signal }, 'Failed to load hub updates.').then((data) =>
+  request(`${VIDEO_API_ROOT}/hub/${hubId}/standalone`, { signal }, 'Failed to load hub updates.').then((data) =>
     (Array.isArray(data) ? data : []).map(normalizeVideo).filter(Boolean)
   )
 
 export const fetchGlobalVideos = (signal, page = 1, limit = 12) =>
-  request(`/videos?page=${page}&limit=${limit}`, { signal }, 'Failed to load videos.').then((data) => {
+  request(`${VIDEO_API_ROOT}?page=${page}&limit=${limit}`, { signal }, 'Failed to load videos.').then((data) => {
     const items = data && data.videos ? data.videos : Array.isArray(data) ? data : [];
     return items.map(normalizeVideo).filter(Boolean);
   })
 
 export const fetchGlobalVideoById = (videoId, signal) =>
-  request(`/videos/${videoId}`, { signal }, 'Failed to load video.').then(normalizeVideo)
+  request(`${VIDEO_API_ROOT}/${videoId}`, { signal }, 'Failed to load video.').then(normalizeVideo)
 
 export const fetchExploreContent = (signal) =>
   request('/explore', { signal }, 'Failed to load recommendations.').then((payload) => ({
@@ -680,7 +690,7 @@ export const attachLessonVideo = (token, lessonId, videoId) =>
 
 export const requestVideoUploadUrl = (token, payload) =>
   request(
-    '/videos/upload-url',
+    `${VIDEO_API_ROOT}/upload-url`,
     { method: 'POST', token, body: payload, headers: withIdempotency({}, 'video-upload') },
     'Failed to prepare the video upload.'
   )
@@ -709,7 +719,7 @@ export const uploadVideoFile = async (uploadUrl, file, fileType) => {
 
 export const createVideo = (token, payload) =>
   request(
-    '/videos',
+    VIDEO_API_ROOT,
     {
       method: 'POST',
       token,
@@ -721,7 +731,7 @@ export const createVideo = (token, payload) =>
 
 export const processVideo = (token, videoId) =>
   request(
-    `/videos/${videoId}/process`,
+    `${VIDEO_API_ROOT}/${videoId}/process`,
     {
       method: 'POST',
       token,
@@ -731,11 +741,11 @@ export const processVideo = (token, videoId) =>
   )
 
 export const incrementVideoView = (videoId) =>
-  request(`/videos/${videoId}/view`, { method: 'POST' }, 'Failed to record video view.')
+  request(`${VIDEO_API_ROOT}/${videoId}/view`, { method: 'POST' }, 'Failed to record video view.')
 
 export const toggleVideoLike = (token, videoId) =>
   request(
-    `/videos/${videoId}/like`,
+    `${VIDEO_API_ROOT}/${videoId}/like`,
     {
       method: 'POST',
       token,
@@ -745,7 +755,7 @@ export const toggleVideoLike = (token, videoId) =>
 
 export const fetchVideoComments = (videoId, page = 1, signal) =>
   request(
-    `/videos/${videoId}/comments?page=${page}`,
+    `${VIDEO_API_ROOT}/${videoId}/comments?page=${page}`,
     {
       signal,
     },
@@ -754,7 +764,7 @@ export const fetchVideoComments = (videoId, page = 1, signal) =>
 
 export const addVideoComment = (token, videoId, text) =>
   request(
-    `/videos/${videoId}/comments`,
+    `${VIDEO_API_ROOT}/${videoId}/comments`,
     {
       method: 'POST',
       token,
@@ -775,7 +785,7 @@ export const deleteVideoComment = (token, commentId) =>
 
 export const fetchVideoStatus = (token, videoId, signal) =>
   request(
-    `/videos/${videoId}/status`,
+    `${VIDEO_API_ROOT}/${videoId}/status`,
     {
       token,
       signal,
@@ -799,7 +809,45 @@ export const deleteCourse = (token, courseId) =>
 
 export const deleteVideo = (token, videoId) =>
   request(
-    `/videos/${videoId}`,
+    `${VIDEO_API_ROOT}/${videoId}`,
     { method: 'DELETE', token, headers: withIdempotency({}, 'video-delete') },
     'Failed to delete video.'
   )
+
+export const uploadCustomThumbnail = async (token, videoId, file) => {
+  const normalizedType = String(file?.type || '').toLowerCase()
+  const allowedTypes = new Set(['image/jpeg', 'image/png'])
+
+  if (!allowedTypes.has(normalizedType)) {
+    throw new Error('Invalid image type. Use a JPEG or PNG file.')
+  }
+
+  if (Number(file?.size || 0) > 2 * 1024 * 1024) {
+    throw new Error('File too large. Maximum size is 2MB.')
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${VIDEO_API_ROOT}/${videoId}/thumbnail`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': normalizedType,
+        'Idempotency-Key': buildIdempotencyKey(`thumbnail-${videoId}`)
+      },
+      body: file
+    })
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      throw new Error(payload?.message || 'Failed to upload custom thumbnail.')
+    }
+
+    return payload
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('Unable to reach the server right now.')
+    }
+    throw error
+  }
+}

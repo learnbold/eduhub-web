@@ -8,6 +8,7 @@ import {
   incrementVideoView,
   toggleVideoLike,
 } from '../utils/dashboardApi'
+import { buildAssetUrl, getVideoThumbnailUrl } from '../utils/media'
 import './VideoPlayer.css'
 
 const getVideoId = (video) => video?._id || video?.videoId || video?.id || ''
@@ -72,11 +73,7 @@ function VideoPlayer({ video, onEnded, showHeader = true, showComments = true, a
 
   useEffect(() => {
     const element = videoRef.current
-    let sourceUrl = video?.url || video?.hlsUrl || video?.videoUrl
-
-    if (sourceUrl && !sourceUrl.startsWith('http') && !sourceUrl.startsWith('blob:')) {
-      sourceUrl = `https://cf.sparklass.com/${sourceUrl.replace(/^\/+/, '')}`
-    }
+    let sourceUrl = buildAssetUrl(video?.url || video?.hlsUrl || video?.videoUrl)
 
     if (!element || !sourceUrl) {
       return undefined
@@ -321,6 +318,7 @@ function VideoPlayer({ video, onEnded, showHeader = true, showComments = true, a
           playsInline
           autoPlay={autoPlay}
           onEnded={onEnded}
+          poster={getVideoThumbnailUrl(video)}
         />
       </div>
 
