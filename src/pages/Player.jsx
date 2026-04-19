@@ -7,7 +7,8 @@ import VideoPlayer from '../components/VideoPlayer'
 import { useAuth } from '../context/AuthContext'
 import './Player.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
+const VIDEO_API_ROOT = `${API_BASE_URL}/videos`
 
 const emptyStates = {
   auth: {
@@ -68,7 +69,7 @@ function Player() {
         setError('')
         setEmptyStateKey('')
 
-        const response = await fetch(`${API_BASE_URL}/videos/course/${courseId}/playback`, {
+        const response = await fetch(`${VIDEO_API_ROOT}/course/${courseId}/playback`, {
           signal: controller.signal,
           credentials: 'include',
           headers: {

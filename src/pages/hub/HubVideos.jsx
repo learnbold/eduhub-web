@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { deleteVideo, fetchManagedHubVideos } from '../../utils/dashboardApi'
+import { applyThumbnailFallback, getVideoThumbnailUrl } from '../../utils/media'
 
 const cardImageStyle = {
   width: '100%',
@@ -149,7 +150,7 @@ function HubVideos() {
                     onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.08)'; e.currentTarget.querySelector('.action-icons').style.opacity = '0'; }}>
                     
                     <div style={cardThumbnailContainerStyle}>
-                      <img src={video.thumbnailUrl || 'https://via.placeholder.com/600x400?text=Video'} alt={video.title} style={cardImageStyle} />
+                      <img src={getVideoThumbnailUrl(video)} alt={video.title} style={cardImageStyle} onError={applyThumbnailFallback} />
                       <div className="action-icons" style={actionIconsStyle}>
                         <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
                         <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
@@ -212,7 +213,7 @@ function HubVideos() {
                     onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 24px 70px rgba(15, 23, 42, 0.08)'; e.currentTarget.querySelector('.action-icons').style.opacity = '0'; }}>
                     
                     <div style={cardThumbnailContainerStyle}>
-                      <img src={video.thumbnailUrl || 'https://via.placeholder.com/600x400?text=Video'} alt={video.title} style={cardImageStyle} />
+                      <img src={getVideoThumbnailUrl(video)} alt={video.title} style={cardImageStyle} onError={applyThumbnailFallback} />
                       <div className="action-icons" style={actionIconsStyle}>
                         <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
                         <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>

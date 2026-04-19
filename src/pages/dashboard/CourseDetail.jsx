@@ -16,6 +16,7 @@ import {
   fetchLessonsByModule,
   createModule,
   createLesson,
+  uploadCustomThumbnail,
 } from '../../utils/dashboardApi'
 
 function CourseDetail() {
@@ -61,6 +62,7 @@ function CourseDetail() {
   const [creatingLesson, setCreatingLesson] = useState(false)
   const [uploadingLessonId, setUploadingLessonId] = useState('')
   const [lessonUploadStage, setLessonUploadStage] = useState('')
+  const [uploadingThumbnailId, setUploadingThumbnailId] = useState('')
   const lessonFileInputRefs = useRef({})
 
   const refreshCourseOutline = useCallback(async (signal) => {
@@ -173,6 +175,22 @@ function CourseDetail() {
     },
     [course?._id, hub?._id, refreshCourseOutline, refreshManagedVideos, token, uploadingLessonId]
   )
+
+  const handleCustomThumbnailUpload = useCallback(async (videoId, file) => {
+    if (!file || !course?._id || uploadingThumbnailId) return
+    setError('')
+    setSuccess('')
+    try {
+      setUploadingThumbnailId(videoId)
+      await uploadCustomThumbnail(token, videoId, file)
+      await refreshManagedVideos()
+      setSuccess('Custom thumbnail uploaded successfully.')
+    } catch (err) {
+      setError(err.message || 'Failed to upload custom thumbnail.')
+    } finally {
+      setUploadingThumbnailId('')
+    }
+  }, [course?._id, refreshManagedVideos, token, uploadingThumbnailId])
 
   useEffect(() => {
     if (!hub?._id) {
@@ -562,6 +580,19 @@ function CourseDetail() {
                     <span>Duration</span>
                     <strong>{video.duration ? `${video.duration}s` : 'Pending'}</strong>
                   </div>
+                </div>
+                
+                <div style={{ padding: '16px', borderTop: '1px solid var(--border-color, #334155)', display: 'flex', justifyContent: 'flex-end' }}>
+                  <label className="dashboard-button--ghost" style={{ cursor: 'pointer', margin: 0, padding: '6px 12px', fontSize: '13px' }}>
+                    {uploadingThumbnailId === video._id ? 'Uploading...' : 'Upload Thumbnail'}
+                    <input 
+                      type="file" 
+                      accept="image/jpeg, image/png" 
+                      style={{ display: 'none' }} 
+                      onChange={(e) => handleCustomThumbnailUpload(video._id, e.target.files?.[0])}
+                      disabled={uploadingThumbnailId === video._id}
+                    />
+                  </label>
                 </div>
               </article>
             ))}
