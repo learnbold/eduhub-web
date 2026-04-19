@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
-import { DashboardCard, DashboardModal, EditPlaceholderModal } from '../../components/dashboard/DashboardCards'
+import { Link, useOutletContext } from 'react-router-dom'
+import { DashboardModal, EditPlaceholderModal } from '../../components/dashboard/DashboardCards'
 import { useAuth } from '../../context/AuthContext'
 import { deleteVideo, fetchManagedHubVideos } from '../../utils/dashboardApi'
 import { applyThumbnailFallback, getVideoThumbnailUrl } from '../../utils/media'
 
 function HubVideos() {
-  const navigate = useNavigate()
   const { token } = useAuth()
   const { hub } = useOutletContext()
   const [videos, setVideos] = useState([])
@@ -74,64 +73,37 @@ function HubVideos() {
     }
   }
 
-  const renderVideoGrid = (items, emptyTitle, emptyBody) => {
-    if (items.length === 0) {
-      return (
-        <div className="dashboard-empty">
-          <h3>{emptyTitle}</h3>
-          <p>{emptyBody}</p>
-        </div>
-      )
-    }
+  const cardHoverStyle = {
+    transition: 'all 0.2s ease',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+    boxShadow: '0 24px 70px rgba(15, 23, 42, 0.08)',
+  };
 
-    return (
-      <div className="dashboard-grid dashboard-grid--cards">
-        {items.map((video) => (
-          <DashboardCard
-            key={video._id}
-            title={video.title}
-            description={video.description || (video.videoType === 'standalone' ? 'Hub update video.' : 'Course lesson video.')}
-            thumbnail={video.thumbnailUrl || video.thumbnail}
-            eyebrow={video.videoType === 'standalone' ? 'Standalone' : 'Course video'}
-            onOpen={() => navigate(`/watch/${video._id}`)}
-            onEdit={() => setVideoToEdit(video)}
-            onDelete={() => setVideoToDelete(video)}
-            badges={[
-              <span
-                key="status"
-                className={
-                  video.status === 'ready'
-                    ? 'dashboard-pill dashboard-pill--success'
-                    : 'dashboard-pill dashboard-pill--warning'
-                }
-              >
-                {video.status}
-              </span>,
-            ]}
-            meta={[
-              { label: 'Views', value: video.viewsCount || 0 },
-              { label: 'Comments', value: video.commentsCount || 0 },
-              { label: 'Status', value: video.status },
-            ]}
-          >
-            {video.course?.title ? (
-              <p className="dashboard-muted">Course: {video.course.title}</p>
-            ) : null}
+  const cardThumbnailContainerStyle = {
+    width: '100%',
+    height: '160px',
+    overflow: 'hidden',
+    borderRadius: '12px',
+    position: 'relative',
+  };
 
-            {video.batchSummaries?.length ? (
-              <div className="dashboard-pill-row">
-                {video.batchSummaries.map((batch) => (
-                  <span key={batch._id} className="dashboard-pill dashboard-pill--neutral">
-                    {batch.title}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </DashboardCard>
-        ))}
-      </div>
-    )
-  }
+  const cardImageStyle = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  };
+
+  const actionIconsStyle = {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    display: 'flex',
+    gap: '8px',
+    opacity: 0,
+    transition: 'opacity 0.2s ease',
+  };
 
   return (
     <div className="dashboard-page">
@@ -193,8 +165,8 @@ function HubVideos() {
                     <div style={cardThumbnailContainerStyle}>
                       <img src={getVideoThumbnailUrl(video)} alt={video.title} style={cardImageStyle} onError={applyThumbnailFallback} />
                       <div className="action-icons" style={actionIconsStyle}>
-                        <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
-                        <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
+                        <button onClick={() => setVideoToEdit(video)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
+                        <button onClick={() => setVideoToDelete(video)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
                       </div>
                     </div>
 
@@ -256,8 +228,8 @@ function HubVideos() {
                     <div style={cardThumbnailContainerStyle}>
                       <img src={getVideoThumbnailUrl(video)} alt={video.title} style={cardImageStyle} onError={applyThumbnailFallback} />
                       <div className="action-icons" style={actionIconsStyle}>
-                        <button onClick={() => handleEdit(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
-                        <button onClick={() => handleDelete(video._id)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
+                        <button onClick={() => setVideoToEdit(video)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Edit">✏️</button>
+                        <button onClick={() => setVideoToDelete(video)} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#f87171', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} title="Delete">🗑️</button>
                       </div>
                     </div>
 
