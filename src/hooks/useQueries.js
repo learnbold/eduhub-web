@@ -7,8 +7,7 @@ import {
   fetchPublicHubPage,
 } from '../utils/dashboardApi'
 import { useAuth } from '../context/AuthContext'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+import { API_BASE_URL } from '../config/env'
 
 export const fetchCourses = async ({ signal }) => {
   const response = await fetch(`${API_BASE_URL}/courses`, { signal })

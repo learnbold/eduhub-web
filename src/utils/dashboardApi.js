@@ -1,6 +1,6 @@
 import { buildAssetUrl, getVideoThumbnailUrl } from './media'
+import { API_BASE_URL } from '../config/env'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 const VIDEO_API_ROOT = '/videos'
 const MUTATION_METHODS = new Set(['POST', 'PATCH', 'DELETE'])
 
@@ -695,6 +695,69 @@ export const requestVideoUploadUrl = (token, payload) =>
     'Failed to prepare the video upload.'
   )
 
+export const uploadVideoFileWithProgress = (uploadUrl, file, fileType, onProgress, abortSignal = null) => {
+  if (!uploadUrl || !file) {
+    return Promise.reject(new Error('Upload URL and file are required.'))
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    let isAborted = false
+
+    // Handle abort from external signal
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        reject(new Error('Upload cancelled.'))
+        return
+      }
+      abortSignal.addEventListener('abort', () => {
+        isAborted = true
+        xhr.abort()
+        reject(new Error('Upload cancelled.'))
+      })
+    }
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && !isAborted) {
+        const percent = Math.round((e.loaded / e.total) * 100)
+        onProgress?.(percent)
+      }
+    }
+
+    xhr.onload = () => {
+      if (isAborted) return
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve()
+      } else {
+        const errorDetail = xhr.statusText || `Status ${xhr.status}`
+        reject(new Error(`Upload failed: ${errorDetail}`))
+      }
+    }
+
+    xhr.onerror = () => {
+      if (isAborted) return
+      reject(new Error('Network error during upload. Check your connection and try again.'))
+    }
+
+    xhr.ontimeout = () => {
+      if (isAborted) return
+      reject(new Error('Upload timed out after 1 hour. Please try again with a smaller file.'))
+    }
+
+    xhr.onabort = () => {
+      if (!isAborted) {
+        isAborted = true
+        reject(new Error('Upload was cancelled.'))
+      }
+    }
+
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', file.type || `video/${fileType}`)
+    xhr.timeout = 3600000 // 1 hour
+    xhr.send(file)
+  })
+}
+
 export const uploadVideoFile = async (uploadUrl, file, fileType) => {
   try {
     const response = await fetch(uploadUrl, {
@@ -715,6 +778,99 @@ export const uploadVideoFile = async (uploadUrl, file, fileType) => {
 
     throw error
   }
+}
+
+export const getVideoStatus = (token, videoId, timeoutMs = 10000) => {
+  // Create AbortController for request timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  return request(
+    `${VIDEO_API_ROOT}/${videoId}/status`,
+    {
+      method: 'GET',
+      token,
+      signal: controller.signal,
+    },
+    'Failed to fetch video status.'
+  )
+    .then((result) => {
+      clearTimeout(timeoutId)
+      return result
+    })
+    .catch((error) => {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        throw new Error('Video status check timed out. Please check again shortly.')
+      }
+      throw error
+    })
+}
+
+// Safe polling helper with timeout and error recovery
+export const createSafePolling = (options = {}) => {
+  const {
+    maxPolls = 120, // 6 minutes at 3s intervals
+    pollInterval = 3000,
+    onMaxTimeoutReached = () => {},
+  } = options
+
+  let intervalId = null
+  let pollCount = 0
+  let isActive = false
+
+  const stop = () => {
+    if (intervalId) {
+      clearInterval(intervalId)
+      intervalId = null
+    }
+    isActive = false
+    pollCount = 0
+  }
+
+  const start = (pollingFn) => {
+    if (isActive) {
+      console.warn('Polling already active. Call stop() first.')
+      return
+    }
+
+    if (!pollingFn || typeof pollingFn !== 'function') {
+      console.error('Polling function is required and must be callable')
+      return
+    }
+
+    isActive = true
+    pollCount = 0
+
+    // Initial poll immediately
+    try {
+      pollingFn(pollCount)
+    } catch (initialError) {
+      console.error('Initial polling call failed:', initialError)
+      stop()
+      throw initialError
+    }
+
+    // Then set interval
+    intervalId = setInterval(() => {
+      pollCount += 1
+
+      if (pollCount >= maxPolls) {
+        stop()
+        onMaxTimeoutReached()
+        return
+      }
+
+      try {
+        pollingFn(pollCount)
+      } catch (pollError) {
+        console.error('Polling call failed at attempt', pollCount, ':', pollError)
+        // Continue polling on error - let the callback handle it
+      }
+    }, pollInterval)
+  }
+
+  return { start, stop, isActive: () => isActive }
 }
 
 export const createVideo = (token, payload) =>

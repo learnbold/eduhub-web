@@ -5,9 +5,9 @@ import Navbar from '../components/Navbar'
 import VideoList from '../components/VideoList'
 import VideoPlayer from '../components/VideoPlayer'
 import { useAuth } from '../context/AuthContext'
+import { API_BASE_URL } from '../config/env'
 import './Player.css'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '')
 const VIDEO_API_ROOT = `${API_BASE_URL}/videos`
 
 const emptyStates = {
