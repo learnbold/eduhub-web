@@ -16,6 +16,7 @@ import BatchDetail from './pages/dashboard/BatchDetail'
 import CoursesList from './pages/dashboard/CoursesList'
 import CreateCourse from './pages/dashboard/CreateCourse'
 import CourseDetail from './pages/dashboard/CourseDetail'
+import UploadNote from './pages/dashboard/UploadNote'
 import UploadVideo from './pages/dashboard/UploadVideo'
 import HubAdminPanel from './pages/hub/HubAdminPanel'
 import HubAnalytics from './pages/hub/HubAnalytics'
@@ -24,6 +25,7 @@ import HubPublic from './pages/hub/HubPublic'
 import HubSettings from './pages/hub/HubSettings'
 import HubStudents from './pages/hub/HubStudents'
 import HubTeamManagement from './pages/hub/HubTeamManagement'
+import HubNotes from './pages/hub/HubNotes'
 import HubVideos from './pages/hub/HubVideos'
 import './App.css'
 
@@ -53,6 +55,8 @@ function App() {
             <Route path="courses/:id" element={<CourseDetail />} />
             <Route path="videos" element={<HubVideos />} />
             <Route path="videos/upload" element={<UploadVideo />} />
+            <Route path="notes" element={<HubNotes />} />
+            <Route path="notes/upload" element={<UploadNote />} />
             <Route path="students" element={<HubStudents />} />
             <Route path="teachers" element={<HubTeamManagement />} />
             <Route path="admin" element={<HubAdminPanel />} />

@@ -1,10 +1,12 @@
 import {
+  createNote,
   createVideo,
   getVideoFileType,
   getVideoStatus,
   processVideo,
+  requestNoteUploadUrl,
   requestVideoUploadUrl,
-  uploadVideoFileWithProgress,
+  uploadFileWithProgress,
 } from './dashboardApi'
 import { uploadStore } from '../store/uploadStore'
 
@@ -17,12 +19,37 @@ const uploadTasks = new Map()
 const uploadAbortControllers = new Map()
 const pollingTimers = new Map()
 const progressUpdaters = new Map()
+const uploadQueue = []
+let activeUploadId = null
 
 const createUploadId = () => `upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
+const getQueuePosition = (uploadId) => uploadQueue.findIndex((id) => id === uploadId) + 1
+
+const normalizeUploadType = (value) => (value === 'note' ? 'note' : 'video')
+
+const getContentTypeForUpload = (file, resourceType) => {
+  if (resourceType === 'note') {
+    return 'application/pdf'
+  }
+
+  const fileType = getVideoFileType(file)
+  return file.type || `video/${fileType}`
+}
+
+const updateQueuePositions = () => {
+  uploadQueue.forEach((uploadId, index) => {
+    const upload = uploadStore.getUpload(uploadId)
+    if (upload && upload.status === 'queued') {
+      uploadStore.updateStatus(uploadId, 'queued', {
+        queuePosition: index + 1,
+      })
+    }
+  })
+}
+
 const stopPolling = (uploadId) => {
   const timerId = pollingTimers.get(uploadId)
-
   if (timerId) {
     window.clearTimeout(timerId)
     pollingTimers.delete(uploadId)
@@ -31,11 +58,9 @@ const stopPolling = (uploadId) => {
 
 const cleanupProgressUpdater = (uploadId) => {
   const updater = progressUpdaters.get(uploadId)
-
   if (updater?.dispose) {
     updater.dispose()
   }
-
   progressUpdaters.delete(uploadId)
 }
 
@@ -44,6 +69,12 @@ const cleanupUploadResources = (uploadId) => {
   cleanupProgressUpdater(uploadId)
   uploadAbortControllers.delete(uploadId)
   uploadTasks.delete(uploadId)
+
+  const queueIndex = uploadQueue.indexOf(uploadId)
+  if (queueIndex !== -1) {
+    uploadQueue.splice(queueIndex, 1)
+    updateQueuePositions()
+  }
 }
 
 const createProgressUpdater = (uploadId) => {
@@ -72,7 +103,6 @@ const createProgressUpdater = (uploadId) => {
     }
 
     const delay = Math.max(0, PROGRESS_THROTTLE_MS - (Date.now() - lastSentAt))
-
     timerId = window.setTimeout(() => {
       flush(queuedProgress ?? lastProgress)
     }, delay)
@@ -110,27 +140,21 @@ const schedulePoll = (uploadId, callback, delay = POLL_INTERVAL_MS) => {
   pollingTimers.set(uploadId, timerId)
 }
 
-const beginPolling = (uploadId, token) => {
+const beginVideoPolling = (uploadId, token) => {
   const poll = async (attempt = 0, consecutiveErrors = 0) => {
     const upload = uploadStore.getUpload(uploadId)
 
-    if (!upload?.videoId || upload.status !== 'processing') {
+    if (!upload?.resourceId || upload.status !== 'processing') {
       stopPolling(uploadId)
       return
     }
 
     try {
-      const statusPayload = await getVideoStatus(token, upload.videoId)
+      const statusPayload = await getVideoStatus(token, upload.resourceId)
       const status = statusPayload?.status || 'processing'
 
       if (status === 'ready') {
-        uploadStore.updateStatus(uploadId, 'ready', {
-          progress: 100,
-          error: null,
-          hint: '',
-          queuePosition: null,
-          queueState: null,
-        })
+        uploadStore.setSuccess(uploadId, 'Video upload complete')
         cleanupUploadResources(uploadId)
         return
       }
@@ -168,7 +192,7 @@ const beginPolling = (uploadId, token) => {
       }
 
       schedulePoll(uploadId, () => poll(attempt + 1, 0))
-    } catch (error) {
+    } catch {
       const nextErrorCount = consecutiveErrors + 1
 
       if (attempt + 1 >= MAX_POLL_ATTEMPTS) {
@@ -193,12 +217,109 @@ const beginPolling = (uploadId, token) => {
   poll()
 }
 
+const getUploadStrategy = (resourceType) => {
+  if (resourceType === 'note') {
+    return {
+      requestUploadUrl(token, metadata, file) {
+        return requestNoteUploadUrl(token, {
+          hubId: metadata.hubId,
+          courseId: metadata.courseId,
+          videoId: metadata.videoId,
+          contentType: file.type || 'application/pdf',
+        })
+      },
+
+      async createResource(token, metadata, file, uploadPayload) {
+        return createNote(token, {
+          noteId: uploadPayload.noteId,
+          title: metadata.title || file.name.replace(/\.[^.]+$/, ''),
+          description: metadata.description || '',
+          courseId: metadata.courseId,
+          videoId: metadata.videoId,
+          hubId: metadata.hubId,
+          r2Key: uploadPayload.r2Key,
+          fileSize: file.size || 0,
+          isFree: metadata.isFree,
+          price: metadata.price,
+          isPublished: metadata.isPublished,
+        })
+      },
+
+      async finalize() {
+        return { nextStatus: 'ready', message: 'Note upload complete' }
+      },
+    }
+  }
+
+  return {
+    requestUploadUrl(token, metadata, file) {
+      const fileType = getVideoFileType(file)
+      return requestVideoUploadUrl(token, {
+        courseId: metadata.courseId,
+        hubId: metadata.hubId,
+        batchId: metadata.batchId,
+        fileType,
+        videoType: metadata.videoType || 'course',
+      })
+    },
+
+    async createResource(token, metadata, file, uploadPayload) {
+      return createVideo(token, {
+        title: metadata.title || file.name.replace(/\.[^.]+$/, ''),
+        description: metadata.description || '',
+        courseId: metadata.courseId,
+        lessonId: metadata.lessonId,
+        batchId: metadata.batchId,
+        hubId: metadata.hubId,
+        r2Key: uploadPayload.r2Key,
+        videoType: metadata.videoType || 'course',
+      })
+    },
+
+    async finalize(token, resourceId) {
+      const processResult = await processVideo(token, resourceId)
+      return {
+        nextStatus: 'processing',
+        queuePosition: Number.isFinite(processResult?.queuePosition) ? processResult.queuePosition : null,
+        queueState: processResult?.queueState || null,
+      }
+    },
+  }
+}
+
+const processQueue = async () => {
+  if (activeUploadId || uploadQueue.length === 0) {
+    return
+  }
+
+  const nextUploadId = uploadQueue[0]
+  const runtime = uploadRuntime.get(nextUploadId)
+
+  if (!runtime) {
+    uploadQueue.shift()
+    updateQueuePositions()
+    processQueue()
+    return
+  }
+
+  activeUploadId = nextUploadId
+  const task = runUpload(nextUploadId, runtime.file, runtime.metadata, runtime.token)
+  uploadTasks.set(nextUploadId, task)
+}
+
 const runUpload = async (uploadId, file, metadata, token) => {
   const progressUpdater = createProgressUpdater(uploadId)
   progressUpdaters.set(uploadId, progressUpdater)
+  const resourceType = normalizeUploadType(metadata.resourceType)
+  const strategy = getUploadStrategy(resourceType)
 
   try {
-    const fileType = getVideoFileType(file)
+    const queueIndex = uploadQueue.indexOf(uploadId)
+    if (queueIndex !== -1) {
+      uploadQueue.splice(queueIndex, 1)
+      updateQueuePositions()
+    }
+
     const abortController = new AbortController()
     uploadAbortControllers.set(uploadId, abortController)
 
@@ -208,22 +329,18 @@ const runUpload = async (uploadId, file, metadata, token) => {
       queuePosition: null,
       queueState: null,
       progress: 0,
+      resourceType,
     })
 
-    const { uploadUrl, r2Key } = await requestVideoUploadUrl(token, {
-      courseId: metadata.courseId,
-      hubId: metadata.hubId,
-      batchId: metadata.batchId,
-      fileType,
-      videoType: metadata.videoType || 'course',
-    })
+    progressUpdater.update(2)
 
+    const uploadPayload = await strategy.requestUploadUrl(token, metadata, file)
     progressUpdater.update(5)
 
-    await uploadVideoFileWithProgress(
-      uploadUrl,
+    await uploadFileWithProgress(
+      uploadPayload.uploadUrl,
       file,
-      fileType,
+      getContentTypeForUpload(file, resourceType),
       (progress) => {
         const scaledProgress = 5 + progress * 0.9
         progressUpdater.update(scaledProgress)
@@ -233,42 +350,48 @@ const runUpload = async (uploadId, file, metadata, token) => {
 
     progressUpdater.update(96)
 
-    const createdVideo = await createVideo(token, {
-      title: metadata.title || file.name.replace(/\.[^.]+$/, ''),
-      description: metadata.description || '',
-      courseId: metadata.courseId,
-      lessonId: metadata.lessonId,
-      batchId: metadata.batchId,
-      hubId: metadata.hubId,
-      r2Key,
-      videoType: metadata.videoType || 'course',
-    })
+    const createdResource = await strategy.createResource(token, metadata, file, uploadPayload)
+    const resourceId = createdResource?._id || createdResource?.id
 
-    const videoId = createdVideo?._id || createdVideo?.id
-
-    if (!videoId) {
-      throw new Error('The uploaded video could not be created.')
+    if (!resourceId) {
+      throw new Error(`The uploaded ${resourceType} could not be created.`)
     }
 
     uploadStore.updateStatus(uploadId, 'uploading', {
       progress: 99,
-      videoId,
+      resourceId,
+      videoId: resourceType === 'video' ? resourceId : null,
     })
 
-    const processResult = await processVideo(token, videoId)
+    const finalization = await strategy.finalize(token, resourceId)
 
-    uploadStore.updateStatus(uploadId, 'processing', {
+    if (finalization.nextStatus === 'ready') {
+      uploadStore.setSuccess(uploadId, finalization.message || 'Upload complete', {
+        resourceId,
+        videoId: resourceType === 'video' ? resourceId : null,
+        resourceType,
+      })
+      cleanupUploadResources(uploadId)
+      return
+    }
+
+    uploadStore.updateStatus(uploadId, finalization.nextStatus, {
       progress: 100,
       error: null,
       hint: '',
-      videoId,
-      queuePosition: Number.isFinite(processResult?.queuePosition) ? processResult.queuePosition : null,
-      queueState: processResult?.queueState || null,
+      resourceId,
+      videoId: resourceType === 'video' ? resourceId : null,
+      resourceType,
+      queuePosition: finalization.queuePosition ?? null,
+      queueState: finalization.queueState ?? null,
     })
 
     uploadAbortControllers.delete(uploadId)
     cleanupProgressUpdater(uploadId)
-    beginPolling(uploadId, token)
+
+    if (resourceType === 'video') {
+      beginVideoPolling(uploadId, token)
+    }
   } catch (error) {
     const nextUpload = uploadStore.getUpload(uploadId)
     const isAbortError =
@@ -278,40 +401,60 @@ const runUpload = async (uploadId, file, metadata, token) => {
       uploadId,
       isAbortError ? 'Upload cancelled.' : error?.message || 'Upload failed. Please try again.',
       {
-        progress: nextUpload?.videoId ? 100 : nextUpload?.progress || 0,
+        progress: nextUpload?.resourceId ? 100 : nextUpload?.progress || 0,
         queuePosition: null,
         queueState: null,
+        resourceType,
       }
     )
   } finally {
     cleanupProgressUpdater(uploadId)
     uploadAbortControllers.delete(uploadId)
     uploadTasks.delete(uploadId)
+
+    if (activeUploadId === uploadId) {
+      activeUploadId = null
+      processQueue()
+    }
   }
 }
 
 export const startUpload = (file, metadata, token) => {
   if (!file) {
-    throw new Error('Please choose a video file to upload.')
+    throw new Error('Please choose a file to upload.')
   }
 
   if (!token) {
-    throw new Error('You need to be signed in to upload videos.')
+    throw new Error('You need to be signed in to upload content.')
+  }
+
+  const resourceType = normalizeUploadType(metadata?.resourceType)
+
+  if (resourceType === 'note' && String(file.type || '').toLowerCase() !== 'application/pdf') {
+    throw new Error('Please choose a PDF file to upload.')
   }
 
   const uploadId = createUploadId()
 
   uploadRuntime.set(uploadId, {
     file,
-    metadata,
+    metadata: {
+      ...metadata,
+      resourceType,
+    },
     token,
   })
+
+  uploadQueue.push(uploadId)
+  const queuePosition = getQueuePosition(uploadId)
 
   uploadStore.addUpload({
     id: uploadId,
     fileName: file.name,
     progress: 0,
-    status: 'uploading',
+    status: queuePosition === 1 ? 'uploading' : 'queued',
+    resourceType,
+    resourceId: null,
     videoId: null,
     error: null,
     courseId: metadata.courseId || null,
@@ -320,11 +463,10 @@ export const startUpload = (file, metadata, token) => {
     batchId: metadata.batchId || null,
     videoType: metadata.videoType || 'course',
     size: file.size || 0,
+    queuePosition: queuePosition > 1 ? queuePosition : null,
   })
 
-  const task = runUpload(uploadId, file, metadata, token)
-  uploadTasks.set(uploadId, task)
-
+  processQueue()
   return uploadId
 }
 
@@ -338,8 +480,19 @@ export const cancelUpload = (uploadId) => {
   }
 
   const upload = uploadStore.getUpload(uploadId)
-
   if (!upload) {
+    return
+  }
+
+  const queueIndex = uploadQueue.indexOf(uploadId)
+  if (queueIndex !== -1) {
+    uploadQueue.splice(queueIndex, 1)
+    updateQueuePositions()
+
+    if (activeUploadId === uploadId) {
+      activeUploadId = null
+      processQueue()
+    }
     return
   }
 
@@ -347,7 +500,13 @@ export const cancelUpload = (uploadId) => {
     uploadStore.setError(uploadId, 'Upload cancelled.', {
       queuePosition: null,
       queueState: null,
+      resourceType: upload.resourceType,
     })
+
+    if (activeUploadId === uploadId) {
+      activeUploadId = null
+      processQueue()
+    }
     return
   }
 
@@ -362,7 +521,6 @@ export const cancelUpload = (uploadId) => {
 
 export const retryUpload = (uploadId) => {
   const runtime = uploadRuntime.get(uploadId)
-
   if (!runtime?.file || !runtime?.token) {
     throw new Error('The original file is no longer available for retry.')
   }
@@ -370,24 +528,31 @@ export const retryUpload = (uploadId) => {
   stopPolling(uploadId)
   cleanupProgressUpdater(uploadId)
 
-  uploadStore.updateStatus(uploadId, 'uploading', {
+  uploadQueue.push(uploadId)
+  const queuePosition = getQueuePosition(uploadId)
+
+  uploadStore.updateStatus(uploadId, queuePosition === 1 ? 'uploading' : 'queued', {
     progress: 0,
+    resourceId: null,
     videoId: null,
     error: null,
     hint: '',
-    queuePosition: null,
+    queuePosition: queuePosition > 1 ? queuePosition : null,
     queueState: null,
   })
 
-  const task = runUpload(uploadId, runtime.file, runtime.metadata, runtime.token)
-  uploadTasks.set(uploadId, task)
+  processQueue()
 }
 
 export const retryProcessing = async (uploadId) => {
   const runtime = uploadRuntime.get(uploadId)
   const upload = uploadStore.getUpload(uploadId)
 
-  if (!upload?.videoId || !runtime?.token) {
+  if (upload?.resourceType !== 'video') {
+    throw new Error('Only video uploads support processing retry.')
+  }
+
+  if (!upload?.resourceId || !runtime?.token) {
     throw new Error('This upload is not ready for processing retry.')
   }
 
@@ -402,14 +567,12 @@ export const retryProcessing = async (uploadId) => {
   })
 
   try {
-    const processResult = await processVideo(runtime.token, upload.videoId)
-
+    const processResult = await processVideo(runtime.token, upload.resourceId)
     uploadStore.updateStatus(uploadId, 'processing', {
       queuePosition: Number.isFinite(processResult?.queuePosition) ? processResult.queuePosition : null,
       queueState: processResult?.queueState || null,
     })
-
-    beginPolling(uploadId, runtime.token)
+    beginVideoPolling(uploadId, runtime.token)
   } catch (error) {
     uploadStore.setError(uploadId, error?.message || 'Failed to restart processing.', {
       progress: 100,
@@ -425,7 +588,6 @@ export const dismissUpload = (uploadId) => {
 
 export const clearCompletedUploads = () => {
   const uploads = uploadStore.getState().uploads
-
   uploads
     .filter((upload) => upload.status === 'ready' || upload.status === 'failed')
     .forEach((upload) => {

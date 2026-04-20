@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   fetchManagedCourseById,
+  fetchManagedHubNotes,
   fetchManagedCourseVideos,
+  formatFileSize,
+  formatNotePrice,
   formatPrice,
   publishCourse,
+  requestNoteDownload,
   updateCourse,
   archiveCourse,
   fetchModulesByCourse,
@@ -25,6 +29,7 @@ function CourseDetail() {
 
   const [course, setCourse] = useState(routeCourse)
   const [videos, setVideos] = useState([])
+  const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -190,6 +195,7 @@ function CourseDetail() {
           fetchManagedCourseById(token, id, controller.signal),
           refreshManagedVideos(controller.signal),
         ])
+        const nextNotes = await fetchManagedHubNotes(token, hub._id, controller.signal)
 
         if (controller.signal.aborted) {
           return
@@ -197,6 +203,7 @@ function CourseDetail() {
 
         setCourse(nextCourse)
         setVideos(nextVideos || [])
+        setNotes(nextNotes || [])
         setEditValues({
           title: nextCourse.title || '',
           description: nextCourse.description || '',
@@ -209,6 +216,7 @@ function CourseDetail() {
         if (!controller.signal.aborted) {
           setCourse(null)
           setVideos([])
+          setNotes([])
           setError(loadError.message || 'Failed to load course details.')
         }
       } finally {
@@ -224,6 +232,18 @@ function CourseDetail() {
   }, [hub?._id, id, refreshCourseOutline, refreshManagedVideos, token])
 
   const basePath = `/hub/${hub.slug}/dashboard`
+  const courseVideoIds = useMemo(() => new Set(videos.map((video) => video._id)), [videos])
+  const courseNotes = useMemo(
+    () =>
+      notes.filter(
+        (note) =>
+          note.courseId === course?._id ||
+          note.course?._id === course?._id ||
+          courseVideoIds.has(note.videoId) ||
+          courseVideoIds.has(note.video?._id)
+      ),
+    [course?._id, courseVideoIds, notes]
+  )
   const isPublished = course?.status === 'published' || course?.isPublished
   const hasLessonVideo = modulesOutline.some((moduleDoc) =>
     moduleDoc.lessons?.some((lesson) => lesson.hasAttachedVideo)
@@ -271,6 +291,13 @@ function CourseDetail() {
             >
               Add Video
             </Link>
+            <Link
+              to={`${basePath}/notes/upload?courseId=${course._id}`}
+              state={{ course, returnTo: `${basePath}/courses/${course._id}` }}
+              className="dashboard-button--ghost"
+            >
+              Add Note
+            </Link>
             <button
               type="button"
               className="dashboard-button--ghost"
@@ -308,6 +335,10 @@ function CourseDetail() {
             <div>
               <span>Status</span>
               <strong>{isArchived ? 'Archived' : isPublished ? 'Published' : 'Draft'}</strong>
+            </div>
+            <div>
+              <span>Notes</span>
+              <strong>{courseNotes.length}</strong>
             </div>
             {course.publishedAt ? (
               <div>
@@ -575,6 +606,85 @@ function CourseDetail() {
                       disabled={uploadingThumbnailId === video._id}
                     />
                   </label>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="dashboard-panel">
+        <div className="dashboard-page__header">
+          <div>
+            <p className="dashboard-section-kicker">Course Notes</p>
+            <h2>PDF resources attached to this course</h2>
+            <p>Notes can be course-wide or tied to a specific lesson video while sharing the same access logic.</p>
+          </div>
+          <div className="dashboard-page__actions">
+            <Link
+              to={`${basePath}/notes/upload?courseId=${course._id}`}
+              state={{ course, returnTo: `${basePath}/courses/${course._id}` }}
+              className="dashboard-button--ghost"
+            >
+              Upload Note
+            </Link>
+          </div>
+        </div>
+
+        {courseNotes.length === 0 ? (
+          <div className="dashboard-empty">
+            <h3>No notes yet</h3>
+            <p>Upload the first PDF note for this course or attach one to a lesson video.</p>
+          </div>
+        ) : (
+          <div className="dashboard-grid dashboard-grid--courses">
+            {courseNotes.map((note) => (
+              <article key={note._id} className="dashboard-course-card">
+                <div className="dashboard-course-card__header">
+                  <div>
+                    <h3>{note.title}</h3>
+                    <p className="dashboard-muted">{note.description || 'Course companion PDF note.'}</p>
+                  </div>
+                  <div className="dashboard-pill-row">
+                    <span className={note.isFree ? 'dashboard-pill dashboard-pill--success' : 'dashboard-pill dashboard-pill--warning'}>
+                      {formatNotePrice(note)}
+                    </span>
+                    <span className={note.isPublished ? 'dashboard-pill dashboard-pill--neutral' : 'dashboard-pill dashboard-pill--warning'}>
+                      {note.isPublished ? 'Published' : 'Draft'}
+                    </span>
+                  </div>
+                </div>
+                <div className="dashboard-course-card__meta">
+                  <div>
+                    <span>File size</span>
+                    <strong>{formatFileSize(note.fileSize)}</strong>
+                  </div>
+                  <div>
+                    <span>Downloads</span>
+                    <strong>{note.downloadsCount || 0}</strong>
+                  </div>
+                  <div>
+                    <span>Video link</span>
+                    <strong>{note.video?.title || 'Course-wide note'}</strong>
+                  </div>
+                </div>
+                <div className="dashboard-inline-actions">
+                  <button
+                    type="button"
+                    className="dashboard-link-button"
+                    onClick={async () => {
+                      try {
+                        const payload = await requestNoteDownload(note._id, token)
+                        if (payload?.downloadUrl) {
+                          window.open(payload.downloadUrl, '_blank', 'noopener,noreferrer')
+                        }
+                      } catch (downloadError) {
+                        setError(downloadError.message || 'Failed to open note.')
+                      }
+                    }}
+                  >
+                    Open PDF
+                  </button>
                 </div>
               </article>
             ))}

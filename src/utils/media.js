@@ -1,6 +1,7 @@
 import { CDN_BASE_URL } from '../config/env'
 
 export const DEFAULT_THUMBNAIL = '/default-thumbnail.svg'
+export const DEFAULT_NOTE_THUMBNAIL = '/default-note.svg'
 
 const ABSOLUTE_ASSET_PATTERN = /^(?:https?:)?\/\//i
 
@@ -44,6 +45,15 @@ export const getVideoThumbnailUrl = (video) =>
     video?.selectedThumbnail,
     video?.thumbnailUrl,
     video?.thumbnail
+  )
+
+export const getNoteThumbnailUrl = (note) =>
+  resolveThumbnailUrl(
+    note?.thumbnailUrl,
+    note?.thumbnail,
+    note?.course?.thumbnail,
+    note?.courseId?.thumbnail,
+    DEFAULT_NOTE_THUMBNAIL
   )
 
 export const applyThumbnailFallback = (event) => {
