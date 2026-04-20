@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useUploadStore } from '../store/uploadStore'
 import {
   cancelUpload,
@@ -8,10 +9,11 @@ import {
 } from '../utils/uploadManager'
 import './UploadManager.css'
 
-const READY_AUTO_DISMISS_MS = 5000
+const SUCCESS_AUTO_DISMISS_MS = 2 * 60 * 1000 // 2 minutes
 
 function UploadManager() {
   const { uploads: rawUploads } = useUploadStore()
+  const queryClient = useQueryClient()
   const dismissTimersRef = useRef(new Map())
   const uploads = useMemo(
     () => [...rawUploads].sort((left, right) => right.createdAt - left.createdAt),
@@ -37,14 +39,28 @@ function UploadManager() {
 
       readyIds.add(upload.id)
 
+      // Clean up success messages that are older than 2 minutes (page reload handling)
+      if (upload.completedAt && Date.now() - upload.completedAt > SUCCESS_AUTO_DISMISS_MS) {
+        dismissUpload(upload.id)
+        return
+      }
+
       if (dismissTimersRef.current.has(upload.id)) {
         return
+      }
+
+      if (upload.resourceType === 'note') {
+        queryClient.invalidateQueries({ queryKey: ['notes'] })
+        queryClient.invalidateQueries({ queryKey: ['hub'] })
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['videos'] })
+        queryClient.invalidateQueries({ queryKey: ['hub'] })
       }
 
       const timerId = window.setTimeout(() => {
         dismissUpload(upload.id)
         dismissTimersRef.current.delete(upload.id)
-      }, READY_AUTO_DISMISS_MS)
+      }, SUCCESS_AUTO_DISMISS_MS)
 
       dismissTimersRef.current.set(upload.id, timerId)
     })
@@ -57,7 +73,7 @@ function UploadManager() {
       window.clearTimeout(timerId)
       dismissTimersRef.current.delete(uploadId)
     })
-  }, [uploads])
+  }, [uploads, queryClient])
 
   useEffect(
     () => () => {
@@ -99,29 +115,41 @@ function UploadManager() {
 
 function UploadItem({ upload }) {
   const statusLabel =
-    upload.status === 'uploading'
-      ? `Uploading ${upload.progress}%`
-      : upload.status === 'processing'
-        ? upload.queuePosition
-          ? `Queued (position ${upload.queuePosition})`
-          : 'Processing...'
-        : upload.status === 'ready'
-          ? 'Upload complete'
-          : 'Upload failed'
+    upload.status === 'queued'
+      ? upload.queuePosition === 1
+        ? 'Starting soon...'
+        : `Queued (position ${upload.queuePosition})`
+      : upload.status === 'uploading'
+        ? `Uploading ${upload.progress}%`
+        : upload.status === 'processing'
+          ? upload.queuePosition
+            ? `Queued (position ${upload.queuePosition})`
+            : 'Processing...'
+          : upload.status === 'ready'
+            ? upload.showSuccess
+              ? upload.successMessage || 'Upload complete'
+              : 'Upload complete'
+            : 'Upload failed'
 
   const secondaryText =
     upload.status === 'processing' && upload.queueState === 'active'
       ? 'Transcoding now'
       : upload.hint || upload.error || ''
 
-  const showRetryProcessing = upload.status === 'failed' && Boolean(upload.videoId)
-  const showRetryUpload = upload.status === 'failed' && !upload.videoId
+  const contentLabel = upload.resourceType === 'note' ? 'note' : 'video'
+  const showRetryProcessing =
+    upload.status === 'failed' && upload.resourceType === 'video' && Boolean(upload.resourceId)
+  const showRetryUpload = upload.status === 'failed' && !upload.resourceId
 
   return (
     <article className={`upload-item upload-item--${upload.status}`}>
       <div className="upload-item__header">
         <span className={`upload-item__badge upload-item__badge--${upload.status}`} aria-hidden="true">
-          {upload.status === 'processing' ? <span className="upload-item__spinner" /> : null}
+          {upload.status === 'processing' || upload.status === 'queued' ? (
+            <span className="upload-item__spinner" />
+          ) : upload.status === 'ready' ? (
+            <span className="upload-item__checkmark">✓</span>
+          ) : null}
         </span>
 
         <div className="upload-item__meta">
@@ -153,16 +181,30 @@ function UploadItem({ upload }) {
         </div>
       )}
 
-      {upload.status === 'processing' && (
+      {(upload.status === 'processing' || upload.status === 'queued') && (
         <div className="upload-item__indeterminate">
           <div className="upload-item__indeterminate-bar" />
         </div>
       )}
 
+      {upload.status === 'ready' && upload.showSuccess && (
+        <div className="upload-item__success">
+          <p className="upload-item__success-text">
+            Your {contentLabel} "{upload.fileName.replace(/\.[^/.]+$/, '')}" is now available in your library.
+          </p>
+        </div>
+      )}
+
       <div className="upload-item__actions">
-        {upload.status === 'uploading' && (
+        {(upload.status === 'uploading' || upload.status === 'queued') && (
           <button type="button" className="upload-item__button upload-item__button--ghost" onClick={() => cancelUpload(upload.id)}>
             Cancel
+          </button>
+        )}
+
+        {upload.status === 'ready' && upload.showSuccess && (
+          <button type="button" className="upload-item__button upload-item__button--ghost" onClick={() => dismissUpload(upload.id)}>
+            Dismiss
           </button>
         )}
 

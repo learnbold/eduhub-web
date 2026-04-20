@@ -6,10 +6,14 @@ import {
   addVideoToBatch,
   fetchManagedBatchById,
   fetchManagedHubCourses,
+  fetchManagedHubNotes,
   fetchManagedHubVideos,
+  formatFileSize,
   formatBatchPrice,
+  formatNotePrice,
   removeCourseFromBatch,
   removeVideoFromBatch,
+  requestNoteDownload,
   updateBatch,
 } from '../../utils/dashboardApi'
 
@@ -28,6 +32,7 @@ function BatchDetail() {
   const [batch, setBatch] = useState(null)
   const [hubCourses, setHubCourses] = useState([])
   const [hubVideos, setHubVideos] = useState([])
+  const [hubNotes, setHubNotes] = useState([])
   const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'courses')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -56,10 +61,11 @@ function BatchDetail() {
       try {
         setLoading(true)
         setError('')
-        const [nextBatch, nextCourses, nextVideos] = await Promise.all([
+        const [nextBatch, nextCourses, nextVideos, nextNotes] = await Promise.all([
           fetchManagedBatchById(token, id, controller.signal),
           fetchManagedHubCourses(token, hub._id, controller.signal),
           fetchManagedHubVideos(token, hub._id, controller.signal),
+          fetchManagedHubNotes(token, hub._id, controller.signal),
         ])
 
         if (controller.signal.aborted) {
@@ -69,6 +75,7 @@ function BatchDetail() {
         setBatch(nextBatch)
         setHubCourses(nextCourses)
         setHubVideos(nextVideos)
+        setHubNotes(nextNotes)
         setEditValues({
           title: nextBatch.title || '',
           description: nextBatch.description || '',
@@ -99,6 +106,17 @@ function BatchDetail() {
   const attachedVideoIds = useMemo(() => new Set(batch?.videos?.map((video) => video._id) || []), [batch?.videos])
   const availableCourses = hubCourses.filter((course) => !attachedCourseIds.has(course._id))
   const availableVideos = hubVideos.filter((video) => !attachedVideoIds.has(video._id))
+  const accessibleNotes = useMemo(
+    () =>
+      hubNotes.filter(
+        (note) =>
+          attachedCourseIds.has(note.courseId) ||
+          attachedCourseIds.has(note.course?._id) ||
+          attachedVideoIds.has(note.videoId) ||
+          attachedVideoIds.has(note.video?._id)
+      ),
+    [attachedCourseIds, attachedVideoIds, hubNotes]
+  )
 
   if (loading && !batch) {
     return (
@@ -595,12 +613,86 @@ function BatchDetail() {
       ) : null}
 
       {activeTab === 'notes' ? (
-        <section className="dashboard-empty">
-          <h3>Notes are staged for the next iteration</h3>
-          <p>
-            The batch model is already ready for notes, subscriptions, live classes, and cohort-based
-            delivery. This tab is reserved so the UX does not need another structural change later.
-          </p>
+        <section className="dashboard-panel">
+          <div className="dashboard-page__header">
+            <div>
+              <p className="dashboard-section-kicker">Batch Notes</p>
+              <h3>PDFs unlocked by this batch</h3>
+              <p>These notes are attached through the courses and videos included in this batch.</p>
+            </div>
+            <div className="dashboard-page__actions">
+              <Link
+                to={`${basePath}/notes/upload`}
+                state={{ batch, returnTo: `${basePath}/batches/${batch._id}` }}
+                className="dashboard-button--ghost"
+              >
+                New Note
+              </Link>
+              <Link to={`${basePath}/notes`} className="dashboard-link-button">
+                Manage All Notes
+              </Link>
+            </div>
+          </div>
+
+          {accessibleNotes.length === 0 ? (
+            <div className="dashboard-empty">
+              <h3>No notes unlock through this batch yet</h3>
+              <p>Attach notes to one of this batch's courses or videos and they will appear here automatically.</p>
+            </div>
+          ) : (
+            <div className="dashboard-grid dashboard-grid--courses">
+              {accessibleNotes.map((note) => (
+                <article key={note._id} className="dashboard-course-card">
+                  <div className="dashboard-course-card__header">
+                    <div>
+                      <h3>{note.title}</h3>
+                      <p className="dashboard-muted">{note.description || 'PDF note available through this batch.'}</p>
+                    </div>
+                    <div className="dashboard-pill-row">
+                      <span className={note.isFree ? 'dashboard-pill dashboard-pill--success' : 'dashboard-pill dashboard-pill--warning'}>
+                        {formatNotePrice(note)}
+                      </span>
+                      <span className={note.isPublished ? 'dashboard-pill dashboard-pill--neutral' : 'dashboard-pill dashboard-pill--warning'}>
+                        {note.isPublished ? 'Published' : 'Draft'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="dashboard-course-card__meta">
+                    <div>
+                      <span>Course</span>
+                      <strong>{note.course?.title || 'Standalone'}</strong>
+                    </div>
+                    <div>
+                      <span>Video</span>
+                      <strong>{note.video?.title || 'Not specific'}</strong>
+                    </div>
+                    <div>
+                      <span>File size</span>
+                      <strong>{formatFileSize(note.fileSize)}</strong>
+                    </div>
+                  </div>
+                  <div className="dashboard-inline-actions">
+                    <button
+                      type="button"
+                      className="dashboard-link-button"
+                      onClick={async () => {
+                        try {
+                          const payload = await requestNoteDownload(note._id, token)
+                          if (payload?.downloadUrl) {
+                            window.open(payload.downloadUrl, '_blank', 'noopener,noreferrer')
+                          }
+                        } catch (downloadError) {
+                          setError(downloadError.message || 'Failed to open note.')
+                        }
+                      }}
+                    >
+                      Open PDF
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
     </div>

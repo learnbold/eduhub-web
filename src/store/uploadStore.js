@@ -58,10 +58,15 @@ const createUploadStore = () => {
           {
             progress: 0,
             status: 'uploading',
+            resourceType: 'video',
+            resourceId: null,
             videoId: null,
             error: null,
             hint: '',
             queuePosition: null,
+            showSuccess: false,
+            successMessage: '',
+            completedAt: null,
             createdAt: Date.now(),
             updatedAt: Date.now(),
             ...upload,
@@ -99,6 +104,20 @@ const createUploadStore = () => {
       patchUpload(uploadId, {
         status: 'failed',
         error,
+        updatedAt: Date.now(),
+        ...extra,
+      })
+    },
+
+    setSuccess: (uploadId, message = 'Upload complete', extra = {}) => {
+      patchUpload(uploadId, {
+        status: 'ready',
+        progress: 100,
+        error: null,
+        hint: '',
+        showSuccess: true,
+        successMessage: message,
+        completedAt: Date.now(),
         updatedAt: Date.now(),
         ...extra,
       })

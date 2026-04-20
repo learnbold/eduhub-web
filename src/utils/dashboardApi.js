@@ -2,6 +2,7 @@ import { buildAssetUrl, getVideoThumbnailUrl } from './media'
 import { API_BASE_URL } from '../config/env'
 
 const VIDEO_API_ROOT = '/videos'
+const NOTE_API_ROOT = '/notes'
 const MUTATION_METHODS = new Set(['POST', 'PATCH', 'DELETE'])
 
 const buildIdempotencyKey = (keyPrefix = 'req') =>
@@ -260,6 +261,78 @@ export const normalizeVideo = (video) => {
   }
 }
 
+export const normalizeNote = (note) => {
+  if (!note) {
+    return null
+  }
+
+  if (typeof note !== 'object') {
+    return {
+      _id: String(note),
+      title: '',
+      description: '',
+      hubId: '',
+      courseId: '',
+      videoId: '',
+      course: null,
+      video: null,
+      fileSize: 0,
+      price: 0,
+      isFree: true,
+      isPublished: false,
+      downloadsCount: 0,
+      mimeType: 'application/pdf',
+      r2Key: '',
+      sourceType: 'standalone',
+      thumbnailUrl: '',
+    }
+  }
+
+  const normalizedCourse =
+    note.course && typeof note.course === 'object'
+      ? normalizeCourse(note.course)
+      : note.courseId && typeof note.courseId === 'object'
+        ? normalizeCourse(note.courseId)
+        : null
+
+  const normalizedVideo =
+    note.video && typeof note.video === 'object'
+      ? normalizeVideo(note.video)
+      : note.videoId && typeof note.videoId === 'object'
+        ? normalizeVideo(note.videoId)
+        : null
+
+  return {
+    ...note,
+    _id: note._id || note.id || '',
+    title: note.title || '',
+    description: note.description || '',
+    hubId:
+      typeof note.hubId === 'string'
+        ? note.hubId
+        : note.hubId?._id || note.hubId || normalizedCourse?.hubId || normalizedVideo?.hubId || '',
+    courseId:
+      typeof note.courseId === 'string'
+        ? note.courseId
+        : note.courseId?._id || normalizedCourse?._id || '',
+    videoId:
+      typeof note.videoId === 'string'
+        ? note.videoId
+        : note.videoId?._id || normalizedVideo?._id || '',
+    course: normalizedCourse,
+    video: normalizedVideo,
+    fileSize: Number(note.fileSize || 0),
+    price: Number(note.price || 0),
+    isFree: note.isFree ?? Number(note.price || 0) === 0,
+    isPublished: Boolean(note.isPublished),
+    downloadsCount: Number(note.downloadsCount || 0),
+    mimeType: note.mimeType || 'application/pdf',
+    r2Key: note.r2Key || '',
+    sourceType: note.sourceType || (normalizedCourse ? 'course' : 'standalone'),
+    thumbnailUrl: buildAssetUrl(note.thumbnailUrl || note.thumbnail || normalizedCourse?.thumbnail || ''),
+  }
+}
+
 export const normalizeComment = (comment) => {
   if (!comment) {
     return null
@@ -301,7 +374,7 @@ export const normalizeBatch = (batch) => {
     expiresAt: batch.expiresAt || null,
     courses: Array.isArray(batch.courses) ? batch.courses.map(normalizeCourse).filter(Boolean) : [],
     videos: Array.isArray(batch.videos) ? batch.videos.map(normalizeVideo).filter(Boolean) : [],
-    notes: Array.isArray(batch.notes) ? batch.notes : [],
+    notes: Array.isArray(batch.notes) ? batch.notes.map(normalizeNote).filter(Boolean) : [],
     students: Array.isArray(batch.students) ? batch.students.map(normalizeMember).filter(Boolean) : [],
     enrollments: Array.isArray(batch.enrollments)
       ? batch.enrollments.map((enrollment) => ({
@@ -346,6 +419,28 @@ export const formatBatchPrice = (batch) => {
   }
 
   return `INR ${Number(batch.price).toLocaleString()}`
+}
+
+export const formatNotePrice = (note) => {
+  if (!note || note.isFree || Number(note.price || 0) === 0) {
+    return 'Free'
+  }
+
+  return `INR ${Number(note.price).toLocaleString()}`
+}
+
+export const formatFileSize = (value) => {
+  const size = Number(value || 0)
+
+  if (!Number.isFinite(size) || size <= 0) {
+    return '0 KB'
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB']
+  const unitIndex = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
+  const normalizedSize = size / 1024 ** unitIndex
+
+  return `${normalizedSize.toFixed(normalizedSize >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
 export const fileToDataUrl = (file) =>
@@ -444,6 +539,7 @@ export const fetchPublicHubPage = async (slug, signal) => {
       batches: [],
       courses: [],
       videos: [],
+      notes: [],
     }
   }
 
@@ -454,6 +550,7 @@ export const fetchPublicHubPage = async (slug, signal) => {
     batches: (Array.isArray(payload?.batches) ? payload.batches : []).map(normalizeBatch).filter(Boolean),
     courses: (Array.isArray(payload?.courses) ? payload.courses : []).map(normalizeCourse).filter(Boolean),
     videos: (Array.isArray(payload?.videos) ? payload.videos : []).map(normalizeVideo).filter(Boolean),
+    notes: (Array.isArray(payload?.notes) ? payload.notes : []).map(normalizeNote).filter(Boolean),
   }
 }
 
@@ -491,6 +588,11 @@ export const fetchManagedCourseVideos = (token, courseId, signal) =>
 export const fetchManagedHubVideos = (token, hubId, signal) =>
   request(`${VIDEO_API_ROOT}/hub/${hubId}/manage`, { token, signal }, 'Failed to load hub videos.').then(
     (data) => (Array.isArray(data) ? data : []).map(normalizeVideo).filter(Boolean)
+  )
+
+export const fetchManagedHubNotes = (token, hubId, signal) =>
+  request(`${NOTE_API_ROOT}/hub/${hubId}/manage`, { token, signal }, 'Failed to load hub notes.').then((data) =>
+    (Array.isArray(data) ? data : []).map(normalizeNote).filter(Boolean)
   )
 
 export const fetchPublicHubStandaloneVideos = (hubId, signal) =>
@@ -695,7 +797,14 @@ export const requestVideoUploadUrl = (token, payload) =>
     'Failed to prepare the video upload.'
   )
 
-export const uploadVideoFileWithProgress = (uploadUrl, file, fileType, onProgress, abortSignal = null) => {
+export const requestNoteUploadUrl = (token, payload) =>
+  request(
+    `${NOTE_API_ROOT}/upload-url`,
+    { method: 'POST', token, body: payload, headers: withIdempotency({}, 'note-upload') },
+    'Failed to prepare the note upload.'
+  )
+
+export const uploadFileWithProgress = (uploadUrl, file, contentType, onProgress, abortSignal = null) => {
   if (!uploadUrl || !file) {
     return Promise.reject(new Error('Upload URL and file are required.'))
   }
@@ -704,12 +813,12 @@ export const uploadVideoFileWithProgress = (uploadUrl, file, fileType, onProgres
     const xhr = new XMLHttpRequest()
     let isAborted = false
 
-    // Handle abort from external signal
     if (abortSignal) {
       if (abortSignal.aborted) {
         reject(new Error('Upload cancelled.'))
         return
       }
+
       abortSignal.addEventListener('abort', () => {
         isAborted = true
         xhr.abort()
@@ -717,31 +826,35 @@ export const uploadVideoFileWithProgress = (uploadUrl, file, fileType, onProgres
       })
     }
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && !isAborted) {
-        const percent = Math.round((e.loaded / e.total) * 100)
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && !isAborted) {
+        const percent = Math.round((event.loaded / event.total) * 100)
         onProgress?.(percent)
       }
     }
 
     xhr.onload = () => {
-      if (isAborted) return
+      if (isAborted) {
+        return
+      }
+
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve()
       } else {
-        const errorDetail = xhr.statusText || `Status ${xhr.status}`
-        reject(new Error(`Upload failed: ${errorDetail}`))
+        reject(new Error(`Upload failed: ${xhr.statusText || `Status ${xhr.status}`}`))
       }
     }
 
     xhr.onerror = () => {
-      if (isAborted) return
-      reject(new Error('Network error during upload. Check your connection and try again.'))
+      if (!isAborted) {
+        reject(new Error('Network error during upload. Check your connection and try again.'))
+      }
     }
 
     xhr.ontimeout = () => {
-      if (isAborted) return
-      reject(new Error('Upload timed out after 1 hour. Please try again with a smaller file.'))
+      if (!isAborted) {
+        reject(new Error('Upload timed out after 1 hour. Please try again.'))
+      }
     }
 
     xhr.onabort = () => {
@@ -752,10 +865,14 @@ export const uploadVideoFileWithProgress = (uploadUrl, file, fileType, onProgres
     }
 
     xhr.open('PUT', uploadUrl)
-    xhr.setRequestHeader('Content-Type', file.type || `video/${fileType}`)
-    xhr.timeout = 3600000 // 1 hour
+    xhr.setRequestHeader('Content-Type', contentType || file.type || 'application/octet-stream')
+    xhr.timeout = 3600000
     xhr.send(file)
   })
+}
+
+export const uploadVideoFileWithProgress = (uploadUrl, file, fileType, onProgress, abortSignal = null) => {
+  return uploadFileWithProgress(uploadUrl, file, file.type || `video/${fileType}`, onProgress, abortSignal)
 }
 
 export const uploadVideoFile = async (uploadUrl, file, fileType) => {
@@ -885,6 +1002,18 @@ export const createVideo = (token, payload) =>
     'Failed to save the uploaded video.'
   ).then(normalizeVideo)
 
+export const createNote = (token, payload) =>
+  request(
+    NOTE_API_ROOT,
+    {
+      method: 'POST',
+      token,
+      body: payload,
+      headers: withIdempotency({}, 'note'),
+    },
+    'Failed to save the uploaded note.'
+  ).then(normalizeNote)
+
 export const processVideo = (token, videoId) =>
   request(
     `${VIDEO_API_ROOT}/${videoId}/process`,
@@ -968,6 +1097,27 @@ export const deleteVideo = (token, videoId) =>
     `${VIDEO_API_ROOT}/${videoId}`,
     { method: 'DELETE', token, headers: withIdempotency({}, 'video-delete') },
     'Failed to delete video.'
+  )
+
+export const updateNote = (token, noteId, payload) =>
+  request(
+    `${NOTE_API_ROOT}/${noteId}`,
+    { method: 'PATCH', token, body: payload, headers: withIdempotency({}, 'note-update') },
+    'Failed to update note.'
+  ).then(normalizeNote)
+
+export const deleteNote = (token, noteId) =>
+  request(
+    `${NOTE_API_ROOT}/${noteId}`,
+    { method: 'DELETE', token, headers: withIdempotency({}, 'note-delete') },
+    'Failed to delete note.'
+  )
+
+export const requestNoteDownload = (noteId, token = '', signal) =>
+  request(
+    `${NOTE_API_ROOT}/${noteId}/download`,
+    { token, signal },
+    'Failed to prepare the note download.'
   )
 
 export const uploadCustomThumbnail = async (token, videoId, file) => {

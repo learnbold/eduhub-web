@@ -3,8 +3,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Footer from '../../components/Footer'
 import Navbar from '../../components/Navbar'
 import VideoPlayer from '../../components/VideoPlayer'
-import { formatBatchPrice, formatPrice } from '../../utils/dashboardApi'
+import { useAuth } from '../../context/AuthContext'
+import { formatBatchPrice, formatNotePrice, formatPrice, requestNoteDownload } from '../../utils/dashboardApi'
 import { usePublicHub } from '../../hooks/useQueries'
+import { getNoteThumbnailUrl } from '../../utils/media'
 import './HubPublic.css'
 
 const TAB_IDS = ['home', 'batches', 'courses', 'videos', 'notes']
@@ -47,6 +49,7 @@ function HubPublic() {
   const { slug = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const identityRef = useRef(null)
+  const { token } = useAuth()
 
   const { data: hubPageData, isLoading: loading, error: fetchError } = usePublicHub(slug)
   const error = fetchError?.message || ''
@@ -56,11 +59,13 @@ function HubPublic() {
     batches: [],
     courses: [],
     videos: [],
+    notes: [],
   }
 
   const [selectedVideoId, setSelectedVideoId] = useState('')
   const [searchValue, setSearchValue] = useState(searchParams.get('q') || '')
   const [isCompactNavPinned, setIsCompactNavPinned] = useState(false)
+  const [paywallNote, setPaywallNote] = useState(null)
 
   const activeTab = TAB_IDS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'home'
 
@@ -94,6 +99,7 @@ function HubPublic() {
     () => hubPage.videos.filter((video) => video.status === 'ready' && !video.isPaid),
     [hubPage.videos]
   )
+  const notes = useMemo(() => hubPage.notes.filter((note) => note.isPublished), [hubPage.notes])
 
   const filteredBatches = useMemo(
     () => matchesQuery(batches, searchValue, ['title', 'description']),
@@ -106,6 +112,10 @@ function HubPublic() {
   const filteredVideos = useMemo(
     () => matchesQuery(videos, searchValue, ['title', 'description', 'courseTitle', 'lessonTitle']),
     [videos, searchValue]
+  )
+  const filteredNotes = useMemo(
+    () => matchesQuery(notes, searchValue, ['title', 'description']),
+    [notes, searchValue]
   )
 
   const selectedVideo = useMemo(
@@ -136,9 +146,9 @@ function HubPublic() {
   }, [filteredVideos, selectedVideo])
 
   const bioText = hub?.description || 'Teaching with clarity. Learning with purpose.'
-  const noteCount = batches.reduce((total, batch) => total + Number(batch.noteCount || 0), 0)
+  const noteCount = notes.length
   const studentCount = batches.reduce((total, batch) => total + Number(batch.studentCount || 0), 0)
-  const contentCount = batches.length + courses.length + videos.length
+  const contentCount = batches.length + courses.length + videos.length + notes.length
 
   const pageStyle = hub
     ? {
@@ -194,6 +204,21 @@ function HubPublic() {
     })
   }
 
+  const handleNoteOpen = async (note) => {
+    try {
+      const payload = await requestNoteDownload(note._id, token)
+
+      if (payload?.downloadUrl) {
+        window.open(payload.downloadUrl, '_blank', 'noopener,noreferrer')
+      }
+    } catch (downloadError) {
+      setPaywallNote({
+        ...note,
+        errorMessage: downloadError.message || 'Unlock this note to continue.',
+      })
+    }
+  }
+
   const renderCard = (item, type, variant = 'grid') => {
     const title = item.title
     const description =
@@ -201,8 +226,10 @@ function HubPublic() {
         ? getPreviewDescription(item, 'A focused batch for learners joining this hub.')
         : type === 'courses'
           ? getPreviewDescription(item, 'A published learning program from this hub.')
-          : getPreviewDescription(item, 'Ready to watch.')
-    const thumbnail = item.thumbnail || item.courseThumbnail || ''
+          : type === 'notes'
+            ? getPreviewDescription(item, 'Downloadable PDF notes and study material.')
+            : getPreviewDescription(item, 'Ready to watch.')
+    const thumbnail = type === 'notes' ? getNoteThumbnailUrl(item) : item.thumbnail || item.courseThumbnail || ''
     const priceLabel =
       type === 'courses'
         ? Number(item.price || 0) > 0
@@ -212,6 +239,8 @@ function HubPublic() {
           ? Number(item.price || 0) > 0
             ? formatBatchPrice(item)
             : ''
+          : type === 'notes'
+            ? formatNotePrice(item)
           : ''
     const cardClass =
       variant === 'rail' ? 'hub-public-content-card hub-public-content-card--rail' : 'hub-public-content-card'
@@ -241,6 +270,30 @@ function HubPublic() {
             <p>{description}</p>
             <span className="hub-public-content-card__meta">
               {item.courseTitle || formatVideoDate(item.publishedAt || item.createdAt)}
+            </span>
+          </div>
+        </button>
+      )
+    }
+
+    if (type === 'notes') {
+      return (
+        <button
+          key={item._id}
+          type="button"
+          className={cardClass}
+          onClick={() => handleNoteOpen(item)}
+        >
+          <div className="hub-public-card-media">
+            {thumbnailNode}
+            {priceLabel ? <span className="hub-public-price-badge">{priceLabel}</span> : null}
+            <span className="hub-public-card-media__action">{item.isFree ? 'Open PDF' : 'Unlock'}</span>
+          </div>
+          <div className="hub-public-content-card__copy">
+            <h3>{title}</h3>
+            <p>{description}</p>
+            <span className="hub-public-content-card__meta">
+              {item.course?.title || item.courseTitle || item.video?.title || 'Hub note'}
             </span>
           </div>
         </button>
@@ -333,30 +386,13 @@ function HubPublic() {
         {renderSection('batches', 'Batches', 'Structured learning paths', filteredBatches, 'batches')}
         {renderSection('courses', 'Courses', 'Published programs', filteredCourses, 'courses')}
         {renderSection('videos', 'Videos', 'Free videos to watch now', filteredVideos, 'videos')}
-        <section className="hub-public-section">
-          <div className="hub-public-section__header">
-            <div>
-              <h2 className="hub-public-section__title">Notes</h2>
-            </div>
-            <button type="button" className="hub-public-section__link" onClick={() => handleTabChange('notes')}>
-              See All &rarr;
-            </button>
-          </div>
-
-          <div className="hub-public-empty-state">
-            <p>Notes will appear here as soon as this hub publishes them.</p>
-          </div>
-        </section>
+        {renderSection('notes', 'Notes', 'PDF notes and handouts', filteredNotes, 'notes')}
       </>
     ),
     batches: renderGridTab(filteredBatches, 'batches', 'No batches available yet.'),
     courses: renderGridTab(filteredCourses, 'courses', 'No courses available yet.'),
     videos: renderGridTab(filteredVideos, 'videos', 'No videos available yet.'),
-    notes: (
-      <div className="hub-public-empty-state hub-public-empty-state--panel">
-        <p>Notes are not published on this hub yet.</p>
-      </div>
-    ),
+    notes: renderGridTab(filteredNotes, 'notes', 'No notes are published on this hub yet.'),
   }
 
   return (
@@ -367,7 +403,7 @@ function HubPublic() {
         {loading ? (
           <section className="hub-public-state-card">
             <h1>Loading hub channel...</h1>
-            <p>Gathering batches, courses, and free videos.</p>
+            <p>Gathering batches, courses, videos, and notes.</p>
           </section>
         ) : error || !hub ? (
           <section className="hub-public-state-card">
@@ -500,6 +536,38 @@ function HubPublic() {
             <section key={`${activeTab}-${searchValue}`} className="hub-public-content-stage">
               {contentByTab[activeTab]}
             </section>
+
+            {paywallNote ? (
+              <div className="hub-public-paywall" role="dialog" aria-modal="true">
+                <div className="hub-public-paywall__panel">
+                  <h2>{paywallNote.title}</h2>
+                  <p>{paywallNote.errorMessage || 'This note is available to enrolled learners.'}</p>
+                  <div className="hub-public-player-zone__actions">
+                    {paywallNote.course?.slug ? (
+                      <button
+                        type="button"
+                        className="hub-public-cta"
+                        onClick={() => navigate(`/course/${paywallNote.course.slug}`)}
+                      >
+                        View Course
+                      </button>
+                    ) : null}
+                    {!token ? (
+                      <button type="button" className="hub-public-cta" onClick={() => navigate('/login')}>
+                        Log In
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="hub-public-cta hub-public-cta--ghost"
+                      onClick={() => setPaywallNote(null)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </main>

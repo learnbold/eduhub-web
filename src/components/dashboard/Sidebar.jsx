@@ -29,24 +29,29 @@ function Sidebar({ hub, memberRole }) {
       badge: '04',
     },
     {
+      label: 'Notes',
+      to: `/hub/${slug}/dashboard/notes`,
+      badge: '05',
+    },
+    {
       label: 'Students',
       to: `/hub/${slug}/dashboard/students`,
-      badge: '05',
+      badge: '06',
     },
     {
       label: 'Teachers',
       to: `/hub/${slug}/dashboard/teachers`,
-      badge: '06',
+      badge: '07',
     },
     {
       label: 'Analytics',
       to: `/hub/${slug}/dashboard/analytics`,
-      badge: '07',
+      badge: '08',
     },
     {
       label: 'Settings',
       to: `/hub/${slug}/dashboard/settings`,
-      badge: '08',
+      badge: '09',
     },
   ]
 
